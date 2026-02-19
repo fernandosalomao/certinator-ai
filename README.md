@@ -11,7 +11,10 @@ Certinator AI is a multi-agent system that can effectively assist students in th
 - **Microsoft Azure** (Access to Microsoft Foundry) - [azure.microsoft.com/free](https://aka.ms/azure-free-account)
 
 ### Required Tools
-- **Python 3.10+** — [python.org/downloads](https://python.org/downloads)
+- **Python 3.12+** — [python.org/downloads](https://python.org/downloads)
+- **uv** — [uv.pypa.io/en/stable/installation](https://uv.pypa.io/en/stable/installation) (Python task runner)
+- **Node.js 20+** — [nodejs.org](https://nodejs.org) (for the frontend)
+- **pnpm** — [pnpm.io](https://pnpm.io/installation) (Node package manager)
 
 ### Azure Subscription Notes
 > [!IMPORTANT]
@@ -25,63 +28,105 @@ git clone https://github.com/fernandosalomao/certinator-ai.git
 cd app
 ```
 
-### Step 2: Create a Python Virtual Environment
+### Step 2: Install dependencies using pnpm:
 ```bash
-# Windows
-python -m venv .venv
-.venv\Scripts\activate
-
-# macOS/Linux
-python3 -m venv .venv
-source .venv/bin/activate
+   pnpm install
 ```
+
+  > **Note:** This automatically sets up the Python environment as well.
+  >
+  > If you have manual issues, you can run:
+  >
+  > ```sh
+  > npm run install:agent
+  > ```
 
 ### Step 3: Set Up Azure Credentials
+Copy `.env.sample` to `.env` and fill in the values:
 
-1. Go to [Microsoft Foundry Portal](https://ai.azure.com)
-2. Create or select your **AI Project**
-3. In your project, go to **Project settings** (gear icon) → **Project properties**
-4. Copy the **Project connection string**
-5. Create a `.env` file in this directory:
-
-```env
-# Option 1: Use Project Connection String (Recommended)
-# Find this in AI Foundry portal: Project settings → Project properties
-AZURE_AI_PROJECT_CONNECTION_STRING=your-connection-string-here
-
-# Option 2: Use Individual Settings
-# AZURE_SUBSCRIPTION_ID=your-subscription-id
-# AZURE_RESOURCE_GROUP=your-resource-group
-# AZURE_AI_PROJECT_NAME=your-project-name
-
-# Model Deployment Name (from your project's Deployments)
-AZURE_AI_MODEL_DEPLOYMENT=gpt-4o
+```bash
+cp .env.sample .env
 ```
 
-> [!TIP]
-> **Finding your connection string:**
-> 1. Open [ai.azure.com](https://ai.azure.com)
-> 2. Select your project
-> 3. Click the gear icon (Project settings) → Project properties
-> 4. Copy the "Project connection string"
+```env
+# Find this in AI Foundry portal: Project settings → Project properties
+AZURE_AI_PROJECT_ENDPOINT=your-project-endpoint-here
+
+# Default model deployment name (required)
+AZURE_AI_MODEL_DEPLOYMENT_NAME=gpt-4.1
+```
 
 > [!WARNING]
 > Never commit your `.env` file to GitHub! It's already in `.gitignore`.
 
-### Step 4: Install Dependencies
-```bash
-pip install -r requirements.txt
-```
+> [!TIP]
+> **Finding your project endpoint:**
+> 1. Go to [Microsoft Foundry Portal](https://ai.azure.com)
+> 2. Create or select your **AI Project**
+> 3. In your project, go to **Project settings** (gear icon) → **Project properties**
+> 4. Copy the **Project connection string**
 
 ## 🚀 Running the Application
-
 ```bash
-python main.py
+pnpm dev
+```
+> This will start both the UI and the Microsoft Agent Framework server concurrently.
+
+Open [http://localhost:3000](http://localhost:3000) for the full web UI.
+
+### What You Get
+
+The app runs a **complete multi-agent workflow** orchestrating 5 specialized agents:
+
+1. **Coordinator** — Routes your query to the right specialist
+2. **CertInfo** — Retrieves certification details (uses Microsoft Learn MCP)
+3. **StudyPlan** — Generates personalized study schedules
+4. **Practice** — Creates practice questions with feedback
+5. **Critic** — Reviews specialist outputs for quality (accuracy, completeness, safety)
+
+### Example Queries to Try
+
+Once the UI opens, try these:
+
+- **Certification info**: "Tell me about the AZ-104 certification and its prerequisites"
+- **Study planning**: "Create a 6-week study plan for AZ-900. I can study 2 hours per day."
+- **Practice questions**: "Give me 5 practice questions on Azure networking for AZ-104"
+
+The workflow automatically routes your query through the coordinator → specialist → (optional critic review) → output.
+
+## 🧪 Running Tests
+```bash
+python -m pytest tests/ -v
 ```
 
-### DevUI 
+Or use the **"run tests"** task in VS Code (Terminal → Run Task).
+
+## 📊 Running Evaluations
 TBD
 
-## Architecture Overview
+## 📁 Project Structure
+TBD
 
-``` 
+## Contributing
+
+Feel free to submit issues and enhancement requests!
+
+## Troubleshooting
+
+### Agent Connection Issues
+
+If you see "I'm having trouble connecting to my tools", make sure:
+
+1. The Microsoft Agent Framework agent is running on port 8000
+2. Your environment variables are set correctly
+3. Both servers started successfully
+
+### Python Dependencies
+
+If you encounter Python import errors:
+
+```bash
+cd agent
+uv sync
+uv run src/main.py
+```

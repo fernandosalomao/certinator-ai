@@ -5,6 +5,26 @@
   "version": "0.2.0",
   "configurations": [
     {
+      "name": "Certinator AI: DevUI Server",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "src.serve",
+      "cwd": "${workspaceFolder}",
+      "envFile": "${workspaceFolder}/.env",
+      "console": "integratedTerminal",
+      "preLaunchTask": "pip install"
+    },
+    {
+      "name": "Certinator AI: Run Evaluation",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "src.evaluation.evaluators",
+      "args": ["--data", "src/evaluation/test_data/cert_info_queries.jsonl"],
+      "cwd": "${workspaceFolder}",
+      "envFile": "${workspaceFolder}/.env",
+      "console": "integratedTerminal"
+    },
+    {
       "name": "Python Debugger: Attach using Process Id",
       "type": "debugpy",
       "request": "attach",
