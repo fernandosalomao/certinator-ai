@@ -12,9 +12,6 @@ Certinator AI is a multi-agent system that can effectively assist students in th
 
 ### Required Tools
 - **Python 3.12+** — [python.org/downloads](https://python.org/downloads)
-- **uv** — [uv.pypa.io/en/stable/installation](https://uv.pypa.io/en/stable/installation) (Python task runner)
-- **Node.js 20+** — [nodejs.org](https://nodejs.org) (for the frontend)
-- **pnpm** — [pnpm.io](https://pnpm.io/installation) (Node package manager)
 
 ### Azure Subscription Notes
 > [!IMPORTANT]
@@ -25,21 +22,9 @@ Certinator AI is a multi-agent system that can effectively assist students in th
 ### Step 1: Clone the Repository
 ```bash
 git clone https://github.com/fernandosalomao/certinator-ai.git
-cd app
 ```
 
-### Step 2: Install dependencies using pnpm:
-```bash
-   pnpm install
-```
-
-  > **Note:** This automatically sets up the Python environment as well.
-  >
-  > If you have manual issues, you can run:
-  >
-  > ```sh
-  > npm run install:agent
-  > ```
+### Step 2: Install dependencies
 
 ### Step 3: Set Up Azure Credentials
 Copy `.env.sample` to `.env` and fill in the values:
@@ -67,12 +52,18 @@ AZURE_AI_MODEL_DEPLOYMENT_NAME=gpt-4.1
 > 4. Copy the **Project connection string**
 
 ## 🚀 Running the Application
-```bash
-pnpm dev
-```
-> This will start both the UI and the Microsoft Agent Framework server concurrently.
 
-Open [http://localhost:3000](http://localhost:3000) for the full web UI.
+### HTTP Server (Agent Inspector)
+
+```bash
+python src/app.py
+```
+
+### CLI (Single-turn chat agent mode)
+
+```bash
+python src/app.py --cli
+```
 
 ### What You Get
 
@@ -95,11 +86,10 @@ Once the UI opens, try these:
 The workflow automatically routes your query through the coordinator → specialist → (optional critic review) → output.
 
 ## 🧪 Running Tests
-```bash
-python -m pytest tests/ -v
-```
+TBD
 
-Or use the **"run tests"** task in VS Code (Terminal → Run Task).
+## 🐞 Debugging with AI Toolkit Agent Inspector
+TBD
 
 ## 📊 Running Evaluations
 TBD
@@ -115,18 +105,3 @@ Feel free to submit issues and enhancement requests!
 
 ### Agent Connection Issues
 
-If you see "I'm having trouble connecting to my tools", make sure:
-
-1. The Microsoft Agent Framework agent is running on port 8000
-2. Your environment variables are set correctly
-3. Both servers started successfully
-
-### Python Dependencies
-
-If you encounter Python import errors:
-
-```bash
-cd agent
-uv sync
-uv run src/main.py
-```

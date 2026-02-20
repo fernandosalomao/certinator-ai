@@ -30,18 +30,8 @@ TBD
 | **Telemetry** | TBD |
 | **Evaluation** | TBD |
 | **External APIs** | MS Learn MCP Server |
-| **Demo UX** | CopilotKit Next.js frontend with AG-UI adapter (`agent-framework-ag-ui`)|
+| **UX** | TBD|
 | **Auth** | `DefaultAzureCredential` / `AzureCliCredential` (Azure Identity) |
-
-### Key Design Decisions
-
-| Decision | Rationale |
-|----------|-----------|
-| **MAF Workflows or Orchestrations** over Connected Agents | Connected Agents (Foundry) use LLM-decided delegation with max depth 2. MAF workflows give explicit graph-based control with unlimited depth, checkpointing, and human-in-the-loop. |
-| **`AzureAIClient`** | `AzureAIClient` from `agent-framework-azure-ai` manages agent creation and LLM invocation via the Azure AI Foundry service. `as_agent()` returns an `Agent` that supports `agent.run("user message")` for async execution. MCP tools use `AzureAIClient.get_mcp_tool()` static method. (to be confirmed) |
-More.. TBD
-
----
 
 ## 2. Agent Roles and Responsibilities
 
@@ -82,7 +72,7 @@ Not all agents require the same model. Cost and latency can be optimized by assi
 |----------|-------|
 | **Name** | `cert-info-agent` |
 | **Model** | `gpt-4.1` |
-| **Tools** | MS Learn MCP (`AzureAIClient.get_mcp_tool()`), Code Interpreter |
+| **Tools** | MS Learn MCP  |
 
 **Responsibilities**:
 - Query MS Learn MCP Server for certification study guides, exam details, and learning paths
@@ -109,21 +99,26 @@ Not all agents require the same model. Cost and latency can be optimized by assi
 
 ### 2.4 Practice Question Agent
 
-**Role**: Generates practice questions aligned with exam objectives and evaluates student responses.
+**Role**: Generates practice questions aligned with exam objectives and evaluates student responses through a multi-turn interactive quiz.
 
 | Property | Value |
 |----------|-------|
 | **Name** | `practice-question-agent` |
-| **Model** | `gpt-4o` (question quality is critical for learning) |
-| **Tools** | Function Tool (answer evaluation, quiz formatting, scoring) |
-| **Output** | Questions with explanations, performance feedback |
+| **Model** | `gpt-4.1` (question quality is critical for learning) |
+| **Tools** | `score_quiz` (deterministic scoring), MS Learn MCP via LearningPathFetcher |
+| **Output** | JSON question array (generation) or Markdown feedback report (evaluation) |
+| **State** | `QuizState` serialised as HTML comment `<!--QUIZ_STATE:...-->` in assistant messages |
 
 **Responsibilities**:
-- Generate multiple-choice questions mapped to specific exam objectives
-- Provide detailed explanations for correct and incorrect answers
-- Track student answers and compute performance metrics per skill area
-- Identify areas of strength and weakness
-- Recommend further study topics based on performance gaps
+- Fetch exam topics and weights from MS Learn via the LearningPathFetcher agent
+- Generate all practice questions at once as a JSON array (at least 1 per topic, distributed by weight)
+- Present questions one at a time to the student across multiple turns
+- Score all answers deterministically via `score_quiz()` (Python, not LLM)
+- Generate a rich feedback report with per-topic breakdown and study recommendations
+- Send final evaluation through CriticExecutor for quality validation
+- Offer a personalised study plan for weak topics (human-in-the-loop)
+
+**Feature flag**: `DEFAULT_PRACTICE_QUESTIONS` (env var, default 10)
 
 
 ### 2.5 Critic Agent (Verifier)
@@ -158,22 +153,14 @@ Not all agents require the same model. Cost and latency can be optimized by assi
 
 | Tool | Agent(s) | Type | Purpose |
 |------|----------|------|---------|
-| **MS Learn MCP Server** | CertInfo | Hosted MCP (`get_mcp_tool`) | Search Microsoft Learn docs, fetch articles, find code samples (primary data source) |
-| **Code Interpreter** | StudyPlan | Hosted (`get_code_interpreter_tool`) | Generate iCal files, compute schedules |
-| **Schedule Calculator** | StudyPlan | `FunctionTool` | Calculate optimal topic distribution given time constraints |
-| **Quiz Formatter** | Practice | `FunctionTool` | Structure questions in consistent format |
-| **Score Calculator** | Practice | `FunctionTool` | Score student answers and compute per-skill metrics |
+| **MS Learn MCP Server** | CertInfo, Practice (via LearningPathFetcher) | Hosted MCP | Search Microsoft Learn docs, fetch articles, find code samples (primary data source) |
+| **Code Interpreter** | StudyPlan | Hosted  | Generate iCal files, compute schedules |
+| **Schedule Calculator** | StudyPlan | Function Tool | Calculate optimal topic distribution given time constraints |
+| **Score Calculator** | Practice | Python Function (`score_quiz`) | Score student answers deterministically and compute per-topic metrics |
 
 ### 4.2 Microsoft Learn MCP Server (Hosted MCP) — Primary Data Source
 
 The MS Learn MCP Server is the **primary** tool for retrieving certification and exam information. It provides semantic search, article fetching, and code sample search across all Microsoft Learn content. Hosted and managed by Azure AI Foundry — no server infrastructure to manage.
-
-**Server URL**: `https://learn.microsoft.com/api/mcp`
-
-**Available Tools** (provided dynamically by the MCP server):
-- `microsoft_docs_search` — semantic search across Microsoft Learn documentation
-- `microsoft_docs_fetch` — fetch and convert a full article to markdown
-- `microsoft_code_sample_search` — search for code samples in documentation
 
 
 **Use Cases** (primary):
@@ -214,13 +201,33 @@ Coordinator (Planner)
 - The Coordinator's instructions explicitly require step-by-step reasoning about what information is needed, which agents to involve, and in what order
 - The plan is expressed as a structured routing decision so downstream agents receive clear task assignments
 
-### 5.2 Critic / Verifier
+### 5.2 Critic / Verifier (Workflow Node)
 
-Dimension-specific checks per agent:
+The Critic is a **dedicated CriticExecutor node** in the workflow graph — not embedded inside specialist handlers. Specialist handlers output a `SpecialistOutput` message, which the workflow routes to the CriticExecutor via graph edges. The CriticExecutor validates the content and either:
 
-1. **Post-CertInfo**: Data accuracy against MCP sources, completeness of exam details, proper source citations
-2. **Post-StudyPlan**: Feasibility (total hours ≤ available time), completeness (all skill areas covered), resource validity
-3. **Post-Practice** (final summary only): Question quality, answer correctness, explanation clarity, alignment to documented exam objectives
+- **PASS** → emits the final response to the user (terminal)
+- **FAIL** (iteration < max) → sends a `RevisionRequest` back to the source handler via conditional edges (feedback loop)
+- **FAIL** (iteration ≥ max) → auto-approves with a disclaimer note (safety cap)
+
+```
+CertInfoHandler / StudyPlanHandler
+        │
+        ▼  (SpecialistOutput)
+   CriticExecutor
+        │
+        ├── PASS → emit response to user
+        └── FAIL → RevisionRequest → source handler → retry
+```
+
+**Maximum iterations**: 2 (configurable via `MAX_CRITIC_ITERATIONS` in `executors/critic.py`).
+
+Dimension-specific checks per content type:
+
+1. **certification_info** (Post-CertInfo): Data accuracy against MCP sources, completeness of exam details, proper source citations
+2. **study_plan** (Post-StudyPlan): Feasibility (total hours ≤ available time), completeness (all skill areas covered), resource validity
+3. **practice_questions** (Post-Practice, final summary only): Question quality, answer correctness, explanation clarity, alignment to documented exam objectives
+
+> **Design note**: Placing the Critic as a workflow node (rather than an inline function call) follows the MAF [Writer-Critic Workflow pattern](https://github.com/microsoft/agent-framework/tree/main/dotnet/samples/GettingStarted/Workflows/_Foundational/08_WriterCriticWorkflow) which enables graph-visible validation, conditional routing for feedback loops, and independent testability.
 
 ### 5.3 Self-Reflection and Iteration
 
@@ -245,13 +252,15 @@ StudyPlan Agent
 The **Practice Agent** iterates during a quiz session:
 
 ```
-Practice Agent
+Practice Agent (multi-turn across workflow runs)
     │
-    ├──► Generate question batch (5 questions per skill area)
-    ├──► After student answers → Score and analyze per-skill metrics
-    ├──► Identify weak areas from scoring breakdown
-    ├──► Generate targeted follow-up questions for weak areas
-    └──► Repeat until student is satisfied or all areas assessed
+    ├──► Run 1: Fetch topics (MCP) → Generate all questions (JSON)
+    │         → Store QuizState in HTML comment → Present Q1
+    ├──► Runs 2–N: Parse QuizState → Record answer → Present next Q
+    ├──► Run N+1: Score deterministically (score_quiz)
+    │         → Generate feedback report → Send to CriticExecutor
+    └──► Human-in-the-loop: Offer study plan for weak topics
+              → User accepts → Coordinator routes to study_plan
 ```
 
 ### 5.4 Role-Based Specialization
@@ -286,9 +295,9 @@ User: "Tell me about the AZ-305 certification"
          │    microsoft_docs_fetch(study guide URL)
          │ 2. Synthesize structured response with citations
          ▼
-    Critic Agent
+    CriticExecutor (workflow node)
          │ Verify: data accuracy, source citations, completeness
-         │ Verdict: PASS ✓
+         │ Verdict: PASS ✓  (or FAIL → loop back to CertInfoHandler)
          ▼
     Coordinator → User
          │ Formatted certification summary:
@@ -308,7 +317,7 @@ User: "Help me prepare for AZ-104. Exam in 6 weeks, 1.5 hours/day."
          │ Plan: [1. Get AZ-104 info → 2. Generate study plan → 3. Offer practice]
          │ Route: CertInfo Agent (first)
          ▼
-    CertInfo Agent → Critic (PASS) → context saved
+    CertInfo Agent → CriticExecutor (PASS) → context saved
          │
     Coordinator
          │ Route: StudyPlan Agent (with CertInfo output + user schedule)
@@ -321,21 +330,45 @@ User: "Help me prepare for AZ-104. Exam in 6 weeks, 1.5 hours/day."
          │ Generate .ics file via Code Interpreter
          ▼
     Critic (PASS) → Coordinator → User
-         │
+
     User: "Now give me practice questions on identity and governance"
          │
-    Coordinator → Practice Agent
-         │ skill_area = "identity and governance"
+    Coordinator → Practice Handler (route="practice")
+         │ 1. LearningPathFetcher agent (MCP) fetches exam topics + weights
+         │ 2. Practice agent generates 10 MCQs as JSON (DEFAULT_PRACTICE_QUESTIONS)
+         │ 3. QuizState stored as HTML comment <!--QUIZ_STATE:...-->
          ▼
-    Practice Agent
-         │ Generate 5 multiple-choice questions
-         │ Present to user, collect answers
-         │ Score and provide per-skill feedback (bypasses Critic)
-         │ Identify weak areas → offer follow-up questions
+    User ← Question 1 of 10 (with QuizState embedded)
+
+    User: "B"
+         │
+    Coordinator (detects quiz_answer) → Practice Handler
+         │ Parse QuizState → record answer → present Question 2
          ▼
-    Practice Agent → final quiz summary → Critic (PASS)
+    User ← Question 2 of 10
+
+    ... (repeat for all questions) ...
+
+    User: "D" (last answer)
+         │
+    Practice Handler
+         │ 1. score_quiz() — deterministic scoring (Python, not LLM)
+         │ 2. Practice agent generates rich Markdown feedback
+         │ 3. Per-topic breakdown, study recommendations
+         │ 4. If weak topics exist: "Want a study plan?"
          ▼
-    User: quiz results + recommendations
+    CriticExecutor (workflow node)
+         │ Verify: score math, explanation accuracy, study recs
+         │ Verdict: PASS ✓ (or FAIL → revision loop)
+         ▼
+    User ← Quiz results + recommendations + study-plan offer
+
+    User: "Yes, create a study plan"
+         │
+    Coordinator (detects post-quiz study request)
+         │ Route: study_plan (context includes weak topics)
+         ▼
+    LearningPathFetcher → StudyPlanScheduler → Critic → User
 ```
 
 ### 6.3 Error Handling Flow
@@ -347,7 +380,7 @@ User: "Help me with the XY-999 certification"
          │ 1. Query MS Learn MCP → No results
          │ 2. Return: "Certification not found"
          ▼
-    Critic Agent
+    CriticExecutor (workflow node)
          │ Verify: graceful failure, no hallucination
          │ Verdict: PASS (correct behavior)
          ▼
@@ -369,18 +402,3 @@ Service Outage: MCP Server is down
 ```
 
 ---
-
-## Frontend
-The AG-UI server exposes the workflow via the official `agent-framework-ag-ui`
-Uses the `CopilotKit` Next.js starter as the frontend, with custom components to display certification info, study plans, and practice questions in an engaging format.
----
-
-## Key SDK Packages
-
-> **Pinning strategy**: Use `==` (exact pin) for `agent-framework-*` packages while the SDK is in preview to avoid breaking changes between releases. Use `>=` (minimum version) for stable Azure SDK packages.
-
-Agent Framework: 1.0.0b260212
-https://github.com/microsoft/agent-framework/tree/python-1.0.0b260212
-
-CopilotKit: v1.50.1
-https://github.com/CopilotKit/CopilotKit/tree/v1.50.1

@@ -1,0 +1,34 @@
+# =============================================================================
+# Certinator AI — Python Dependencies
+# =============================================================================
+# Pin versions to avoid breaking changes while Agent Framework is in preview.
+
+# Microsoft Agent Framework (core + Azure AI integration)
+agent-framework-core==1.0.0b260107
+agent-framework-azure-ai==1.0.0b260107
+
+# HTTP server wrapper for Agent Framework agents
+azure-ai-agentserver-core==1.0.0b10
+azure-ai-agentserver-agentframework==1.0.0b10
+agent-framework-ag-ui==1.0.0b260107
+
+# Azure Identity for DefaultAzureCredential
+azure-identity
+
+# Environment variable loading
+python-dotenv
+
+# Debugging support (VS Code Python Debugger)
+debugpy
+
+# Agent dev CLI (AI Toolkit Agent Inspector integration)
+agent-dev-cli
+
+# Pydantic (structured data models for inter-agent messaging)
+pydantic
+
+# OpenTelemetry tracing (gRPC exporter for AI Toolkit)
+opentelemetry-exporter-otlp-proto-grpc
+
+# Evaluation framework (Azure AI Evaluation SDK)
+azure-ai-evaluation

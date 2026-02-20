@@ -1,33 +1,94 @@
 {
-  // See https://go.microsoft.com/fwlink/?LinkId=733558
-  // for the documentation about the tasks.json format
   "version": "2.0.0",
   "tasks": [
     {
-      "label": "pip install",
-      "type": "shell",
-      "command": "${workspaceFolder}/.venv/bin/pip install -r requirements.txt",
-      "options": {
-        "cwd": "${workspaceFolder}/src/"
-      },
-      "group": {
-        "kind": "build",
-        "isDefault": true
-      },
-      "problemMatcher": []
+      "label": "Validate prerequisites",
+      "type": "aitk",
+      "command": "debug-check-prerequisites",
+      "args": {
+        "portOccupancy": [5679, 8087]
+      }
     },
     {
-      "label": "run tests",
+      "label": "Run Agent HTTP Server",
       "type": "shell",
-      "command": "${workspaceFolder}/.venv/bin/python -m pytest tests/ -v",
+      "command": "${command:python.interpreterPath} -m debugpy --listen 127.0.0.1:5679 -m agentdev run src/app.py --verbose --port 8087",
+      "isBackground": true,
       "options": {
         "cwd": "${workspaceFolder}"
       },
-      "group": {
-        "kind": "test",
-        "isDefault": true
+      "dependsOn": ["Validate prerequisites"],
+      "problemMatcher": {
+        "pattern": [
+          {
+            "regexp": "^.*$",
+            "file": 0,
+            "location": 1,
+            "message": 2
+          }
+        ],
+        "background": {
+          "activeOnStart": true,
+          "beginsPattern": ".*",
+          "endsPattern": "Application startup complete|running on|Started server process"
+        }
+      }
+    },
+    {
+      "label": "Open Agent Inspector",
+      "type": "shell",
+      "command": "echo '${input:openAgentInspector}'",
+      "presentation": {
+        "reveal": "never"
       },
+      "dependsOn": ["Run Agent HTTP Server"]
+    },
+    {
+      "label": "Run Agent in Terminal",
+      "type": "shell",
+      "command": "${command:python.interpreterPath} -m debugpy --listen 127.0.0.1:5679 -m agentdev run src/app.py --cli",
+      "isBackground": true,
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "problemMatcher": {
+        "pattern": [
+          {
+            "regexp": "^.*$",
+            "file": 0,
+            "location": 1,
+            "message": 2
+          }
+        ],
+        "background": {
+          "activeOnStart": true,
+          "beginsPattern": ".*",
+          "endsPattern": "Application startup complete|running on|Started server process"
+        }
+      }
+    },
+    {
+      "label": "Terminate All Tasks",
+      "command": "echo ${input:terminate}",
+      "type": "shell",
       "problemMatcher": []
+    }
+  ],
+  "inputs": [
+    {
+      "id": "openAgentInspector",
+      "type": "command",
+      "command": "ai-mlstudio.openTestTool",
+      "args": {
+        "triggeredFrom": "tasks",
+        "port": 8087
+      }
+    },
+    {
+      "id": "terminate",
+      "type": "command",
+      "command": "workbench.action.tasks.terminate",
+      "args": "terminateAll"
     }
   ]
 }
