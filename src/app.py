@@ -55,16 +55,16 @@ async def run_agui() -> None:
 
     # Build workflow asynchronously because it returns coroutine-based resources.
     agent, credential = await build_workflow()
-    # ag_agent = AgentFrameworkAgent(
-    #     agent=agent,
-    #     name="Certinator AI",
-    #     description=(
-    #         "Multi-agent system for Microsoft certification exam preparation."
-    #     ),
-    # )
+    ag_agent = AgentFrameworkAgent(
+        agent=agent,
+        name="Certinator AI",
+        description=(
+            "Multi-agent system for Microsoft certification exam preparation."
+        ),
+    )
 
     app = FastAPI(title="Microsoft Agent Framework (Python) - Quickstart")
-    add_agent_framework_fastapi_endpoint(app=app, agent=agent, path="/")
+    add_agent_framework_fastapi_endpoint(app=app, agent=ag_agent, path="/")
 
     config = uvicorn.Config(app=app, host="0.0.0.0", port=8000)
     server = uvicorn.Server(config=config)

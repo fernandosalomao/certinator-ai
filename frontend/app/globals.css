@@ -1,8 +1,8 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: #060914;
+  --foreground: #e7ecff;
 }
 
 @theme inline {
@@ -12,15 +12,156 @@
   --font-mono: var(--font-geist-mono);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+* {
+  box-sizing: border-box;
 }
 
 body {
-  background: var(--background);
+  background:
+    radial-gradient(1200px 700px at 15% 0%, #2e2f7a33, transparent 60%),
+    radial-gradient(1000px 600px at 100% 10%, #00b7ff2b, transparent 55%),
+    linear-gradient(180deg, #060914 0%, #090f1f 45%, #060a13 100%);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-geist-sans), Arial, Helvetica, sans-serif;
+  min-height: 100vh;
+}
+
+.app-shell {
+  min-height: 100vh;
+}
+
+.hero-panel {
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background:
+    linear-gradient(145deg, rgba(34, 47, 108, 0.55), rgba(8, 14, 32, 0.75)),
+    radial-gradient(circle at 20% 20%, rgba(129, 140, 248, 0.25), transparent 38%);
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.04) inset,
+    0 24px 70px rgba(3, 8, 27, 0.45);
+}
+
+.glass-card {
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: linear-gradient(160deg, rgba(255, 255, 255, 0.09), rgba(255, 255, 255, 0.03));
+  backdrop-filter: blur(8px);
+}
+
+.surface-card {
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: linear-gradient(155deg, rgba(15, 22, 44, 0.95), rgba(10, 16, 33, 0.95));
+  box-shadow: 0 16px 45px rgba(2, 8, 26, 0.5);
+}
+
+.embedded-chat .copilotKitWindow,
+.embedded-chat .copilotKitChat {
+  min-height: 560px;
+  border-radius: 0.9rem;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: linear-gradient(180deg, rgba(8, 14, 31, 0.92) 0%, rgba(7, 12, 27, 0.96) 100%);
+}
+
+.copilotKitHeader {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(10, 17, 36, 0.86);
+}
+
+.copilotKitMessages {
+  background: transparent;
+}
+
+.copilotKitMessage.copilotKitAssistantMessage {
+  border: 1px solid rgba(126, 156, 255, 0.22);
+  background: rgba(113, 157, 255, 0.08);
+  color: #e8eeff;
+  padding: 1rem 1.1rem !important;
+  line-height: 1.6;
+}
+
+.copilotKitMessage.copilotKitAssistantMessage .copilotKitMessageControls {
+  position: relative !important;
+  inset: auto !important;
+  display: flex;
+  align-items: center;
+  flex-wrap: nowrap;
+  gap: 0.75rem;
+  width: max-content;
+  margin-top: 0.45rem;
+  padding: 0;
+  overflow: visible;
+}
+
+.copilotKitMessageControls .copilotKitMessageControlButton {
+  width: 24px;
+  height: 24px;
+  min-width: 24px;
+  min-height: 24px;
+  flex: 0 0 24px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 !important;
+  padding: 0 !important;
+}
+
+.copilotKitMessageControls .copilotKitMessageControlButton svg {
+  width: 14px;
+  height: 14px;
+  display: block;
+}
+
+.copilotKitMessage.copilotKitUserMessage {
+  border: 1px solid rgba(66, 227, 201, 0.25);
+  background: rgba(42, 194, 173, 0.16);
+  padding: 0.75rem 0.9rem;
+  line-height: 1.5;
+}
+
+.copilotKitMessage.copilotKitAssistantMessage p.copilotKitMarkdownElement,
+.copilotKitMessage.copilotKitUserMessage p.copilotKitMarkdownElement,
+.copilotKitMessage.copilotKitAssistantMessage p,
+.copilotKitMessage.copilotKitUserMessage p {
+  margin: 0;
+}
+
+a.copilotKitMarkdownElement,
+.copilotKitMessage.copilotKitAssistantMessage a,
+.copilotKitMessage.copilotKitUserMessage a {
+  color: #8fb1ff;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+a.copilotKitMarkdownElement:hover,
+.copilotKitMessage.copilotKitAssistantMessage a:hover,
+.copilotKitMessage.copilotKitUserMessage a:hover {
+  color: #b1c8ff;
+}
+
+.copilotKitInput {
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(8, 13, 28, 0.9);
+}
+
+.copilotKitInput > textarea,
+.copilotKitInput input {
+  background: transparent;
+  color: #f3f7ff;
+  caret-color: #e8eeff;
+}
+
+.copilotKitInput > textarea::placeholder,
+.copilotKitInput input::placeholder {
+  color: #9cadde !important;
+  opacity: 1;
+}
+
+.copilotKitWindow,
+.copilotKitChat {
+  --copilot-kit-primary-color: #6f87ff;
+  --copilot-kit-contrast-color: #ffffff;
+  --copilot-kit-background-color: #0b1227;
+  --copilot-kit-secondary-color: #111a36;
+  --copilot-kit-secondary-contrast-color: #e8eeff;
+  --copilot-kit-separator-color: #2a355e;
+  --copilot-kit-muted-color: #9cadde;
 }

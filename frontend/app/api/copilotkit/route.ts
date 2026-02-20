@@ -9,12 +9,16 @@ import { NextRequest } from "next/server";
 // 1. You can use any service adapter here for multi-agent support. We use
 //    the empty adapter since we're only using one agent.
 const serviceAdapter = new ExperimentalEmptyAdapter();
+const agentUrl =
+  process.env.CERTINATOR_AGENT_URL ||
+  process.env.AGENT_URL ||
+  "http://127.0.0.1:8000/";
 
 // 2. Create the CopilotRuntime instance and utilize the Microsoft Agent Framework
 //    AG-UI integration to setup the connection.
 const runtime = new CopilotRuntime({
   agents: {
-    my_agent: new HttpAgent({ url: "http://localhost:8000/" }),
+    my_agent: new HttpAgent({ url: agentUrl }),
   },
 });
 
