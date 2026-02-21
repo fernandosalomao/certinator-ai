@@ -33,3 +33,5 @@ opentelemetry-exporter-otlp-proto-grpc
 # Evaluation framework (Azure AI Evaluation SDK)
 azure-ai-evaluation
 
+# Workflow visualization (mermaid generation)
+graphviz>=0.20.0

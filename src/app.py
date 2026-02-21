@@ -14,14 +14,36 @@ Usage:
 """
 
 import asyncio
+import logging
 import sys
+from collections.abc import AsyncGenerator
+from typing import Any
 
-from agent_framework import ChatMessage, Role
+from ag_ui.core import BaseEvent
+from agent_framework import (
+    ChatMessage,
+    FunctionApprovalResponseContent,
+    FunctionResultContent,
+    Role,
+)
 from agent_framework.observability import configure_otel_providers
 from agent_framework_ag_ui import AgentFrameworkAgent
+from agent_framework_ag_ui._orchestrators import (
+    DefaultOrchestrator,
+    ExecutionContext,
+    HumanInTheLoopOrchestrator,
+    Orchestrator,
+)
 from dotenv import load_dotenv
 
 from executors import extract_message_text
+
+# Configure logging so our debug output is visible
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(name)s %(levelname)s %(message)s",
+)
+logger = logging.getLogger(__name__)
 
 # Load environment variables (override=True for deployed environments)
 load_dotenv(override=True)
@@ -35,6 +57,378 @@ configure_otel_providers(
     vs_code_extension_port=4317,  # AI Toolkit gRPC port
     enable_sensitive_data=True,  # Capture prompts and completions
 )
+
+
+# ---------------------------------------------------------------------------
+# Custom Orchestrator: request_info HITL message filter
+# ---------------------------------------------------------------------------
+# CopilotKit's AG-UI bridge sends the *full* conversation history on
+# every turn.  When a MAF workflow agent has pending ``request_info``
+# calls, the SDK's ``WorkflowAgent._extract_function_responses()``
+# raises ``AgentExecutionException`` if *any* message contains
+# non-function content (e.g. TextContent from an earlier user turn).
+#
+# This orchestrator is placed **first** in the chain so that, when
+# ``pending_requests`` exist, it converts only the ``role: tool``
+# raw AG-UI messages to ``ChatMessage`` objects and passes them
+# **directly** to ``WorkflowAgent.run_stream()``, completely
+# bypassing ``DefaultOrchestrator`` whose ``sanitize_tool_history``
+# would drop orphan tool results that lack a preceding assistant
+# tool-call message.
+# ---------------------------------------------------------------------------
+
+
+class RequestInfoOrchestrator(Orchestrator):
+    """Clean up request_info HITL artifacts and handle responses.
+
+    Placed first in the orchestrator chain.  This orchestrator
+    handles two scenarios:
+
+    **A) Pending requests exist** — the user just submitted an
+    HITL response (quiz answers, study plan accept/reject).
+    Converts only matching ``role: "tool"`` messages and passes
+    them directly to ``WorkflowAgent.run_stream()``, bypassing
+    ``DefaultOrchestrator``'s ``sanitize_tool_history`` which
+    would drop orphan tool results.
+
+    **B) No pending requests** — a normal user message, but the
+    conversation history may contain stale ``request_info`` tool
+    call/result pairs from previous HITL exchanges.  These cause
+    ``KeyError`` in ``_prepare_messages_for_openai`` because the
+    tool result's ``call_id`` has no matching ``FunctionCallContent``
+    after message sanitisation.  Strips those artifacts from
+    ``input_data["messages"]`` then delegates to
+    ``DefaultOrchestrator``.
+    """
+
+    # ── helpers ────────────────────────────────────────────────────
+
+    @staticmethod
+    def _find_request_info_call_ids(
+        raw_messages: list[dict],
+    ) -> set[str]:
+        """Collect tool-call IDs for request_info calls."""
+        ids: set[str] = set()
+        for msg in raw_messages:
+            if msg.get("role") != "assistant":
+                continue
+            for tc in msg.get("tool_calls") or msg.get("toolCalls") or []:
+                fn = tc.get("function") or {}
+                if fn.get("name") == "request_info":
+                    tc_id = tc.get("id", "")
+                    if tc_id:
+                        ids.add(tc_id)
+        return ids
+
+    @staticmethod
+    def _strip_request_info_artifacts(
+        raw_messages: list[dict],
+        request_info_ids: set[str],
+    ) -> list[dict]:
+        """Remove request_info tool calls and their results.
+
+        Returns a new list of raw AG-UI messages with:
+        - ``request_info`` entries removed from assistant
+          ``tool_calls`` arrays.
+        - ``role: "tool"`` messages whose ``tool_call_id``
+          matches a request_info call removed entirely.
+        - Assistant messages left empty after stripping are
+          dropped (unless they have text content).
+        """
+        cleaned: list[dict] = []
+        for msg in raw_messages:
+            role = msg.get("role", "")
+
+            # Drop tool results for request_info calls
+            if role == "tool":
+                tc_id = (
+                    msg.get("tool_call_id")
+                    or msg.get("toolCallId")
+                    or msg.get("actionExecutionId")
+                    or ""
+                )
+                if tc_id in request_info_ids:
+                    continue
+                cleaned.append(msg)
+                continue
+
+            # Strip request_info entries from assistant tool_calls
+            if role == "assistant":
+                tc_key = (
+                    "tool_calls"
+                    if "tool_calls" in msg
+                    else "toolCalls"
+                    if "toolCalls" in msg
+                    else None
+                )
+                if tc_key:
+                    original_tcs = msg[tc_key] or []
+                    filtered_tcs = [
+                        tc
+                        for tc in original_tcs
+                        if tc.get("id", "") not in request_info_ids
+                    ]
+                    if len(filtered_tcs) < len(original_tcs):
+                        msg = dict(msg)  # shallow copy
+                        if filtered_tcs:
+                            msg[tc_key] = filtered_tcs
+                        else:
+                            msg.pop(tc_key, None)
+                            # If no text content either, drop msg
+                            content = msg.get("content", "")
+                            if not content:
+                                continue
+                cleaned.append(msg)
+                continue
+
+            cleaned.append(msg)
+        return cleaned
+
+    # ── Orchestrator interface ────────────────────────────────────
+
+    def can_handle(self, context: ExecutionContext) -> bool:
+        """Always handle — we clean every request."""
+        agent = context.agent
+        pending = getattr(agent, "pending_requests", None) or {}
+        raw_msgs = context.input_data.get("messages", [])
+        ri_ids = self._find_request_info_call_ids(raw_msgs)
+        logger.info(
+            "RequestInfoOrchestrator.can_handle: "
+            "pending=%d, request_info_ids=%d → True",
+            len(pending),
+            len(ri_ids),
+        )
+        return True
+
+    async def run(
+        self,
+        context: ExecutionContext,
+    ) -> AsyncGenerator[BaseEvent, None]:
+        """Route to direct-call or cleanup-and-delegate."""
+        agent = context.agent
+        pending = getattr(agent, "pending_requests", None) or {}
+
+        if pending:
+            async for event in self._run_with_pending(context):
+                yield event
+        else:
+            async for event in self._run_cleanup(context):
+                yield event
+
+    # ── Path A: pending requests (direct call) ────────────────────
+
+    async def _run_with_pending(
+        self,
+        context: ExecutionContext,
+    ) -> AsyncGenerator[BaseEvent, None]:
+        """Handle HITL response by calling agent.run_stream directly."""
+        from agent_framework import AgentThread
+        from agent_framework_ag_ui._events import AgentFrameworkEventBridge
+        from agent_framework_ag_ui._message_adapters import (
+            agui_messages_to_agent_framework,
+        )
+
+        raw = context.input_data.get("messages", [])
+        tool_only_raw = [m for m in raw if m.get("role") == "tool"]
+        logger.info(
+            "RequestInfoOrchestrator[pending]: %d/%d raw messages are tool-role",
+            len(tool_only_raw),
+            len(raw),
+        )
+
+        if not tool_only_raw:
+            logger.warning(
+                "RequestInfoOrchestrator[pending]: no tool "
+                "messages — delegating to DefaultOrchestrator"
+            )
+            default = DefaultOrchestrator()
+            async for event in default.run(context):
+                yield event
+            return
+
+        # Convert and filter to pending IDs only
+        tool_messages = agui_messages_to_agent_framework(tool_only_raw)
+        pending_ids = set(getattr(context.agent, "pending_requests", {}).keys())
+        filtered_messages = []
+        for msg in tool_messages:
+            keep_contents = []
+            for c in msg.contents or []:
+                if isinstance(c, FunctionResultContent):
+                    if c.call_id in pending_ids:
+                        keep_contents.append(c)
+                    else:
+                        logger.info(
+                            "  dropping stale call_id=%s",
+                            c.call_id,
+                        )
+                else:
+                    keep_contents.append(c)
+            if keep_contents:
+                msg.contents = keep_contents
+                filtered_messages.append(msg)
+
+        tool_messages = filtered_messages
+        logger.info(
+            "RequestInfoOrchestrator[pending]: %d msgs after pending-ID filter",
+            len(tool_messages),
+        )
+
+        # Set up event bridge and call agent directly
+        event_bridge = AgentFrameworkEventBridge(
+            run_id=context.run_id,
+            thread_id=context.thread_id,
+            input_messages=tool_only_raw,
+        )
+        yield event_bridge.create_run_started_event()
+
+        thread = AgentThread()
+        thread.metadata = {
+            "ag_ui_thread_id": context.thread_id,
+            "ag_ui_run_id": context.run_id,
+        }
+        update_count = 0
+        async for update in context.agent.run_stream(
+            tool_messages,
+            thread=thread,
+        ):
+            update_count += 1
+            events = await event_bridge.from_agent_run_update(update)
+            for event in events:
+                yield event
+
+        logger.info(
+            "[RequestInfoOrch] stream done. Updates: %d",
+            update_count,
+        )
+
+        # Finalize: close open text message
+        if event_bridge.current_message_id:
+            yield event_bridge.create_message_end_event(
+                event_bridge.current_message_id,
+            )
+
+        # Close pending tool calls
+        if event_bridge.pending_tool_calls:
+            from ag_ui.core import ToolCallEndEvent
+
+            for tc in event_bridge.pending_tool_calls:
+                tc_id = tc.get("id")
+                if tc_id and tc_id not in event_bridge.tool_calls_ended:
+                    yield ToolCallEndEvent(tool_call_id=tc_id)
+
+        yield event_bridge.create_run_finished_event()
+
+    # ── Path B: no pending requests (cleanup + delegate) ──────────
+
+    async def _run_cleanup(
+        self,
+        context: ExecutionContext,
+    ) -> AsyncGenerator[BaseEvent, None]:
+        """Strip stale request_info artifacts, then delegate."""
+        raw = context.input_data.get("messages", [])
+        ri_ids = self._find_request_info_call_ids(raw)
+
+        if ri_ids:
+            cleaned = self._strip_request_info_artifacts(raw, ri_ids)
+            logger.info(
+                "RequestInfoOrchestrator[cleanup]: stripped "
+                "%d request_info artifacts (%d→%d messages)",
+                len(ri_ids),
+                len(raw),
+                len(cleaned),
+            )
+            context.input_data["messages"] = cleaned
+        else:
+            logger.info(
+                "RequestInfoOrchestrator[cleanup]: no request_info artifacts to strip"
+            )
+
+        # Delegate to DefaultOrchestrator
+        default = DefaultOrchestrator()
+        async for event in default.run(context):
+            yield event
+
+
+# ---------------------------------------------------------------------------
+# Agent-level HITL message filter
+# ---------------------------------------------------------------------------
+# ``from_agent_framework()`` (used in ``run_server()``) does not
+# expose an orchestrator chain, so for that code-path we wrap the
+# workflow agent in a transparent proxy that filters messages at
+# the ``run_stream()`` level.  This is the same fix the
+# ``RequestInfoOrchestrator`` applies for ``run_agui()``.
+# ---------------------------------------------------------------------------
+
+_FN_CONTENT_TYPES = (
+    FunctionResultContent,
+    FunctionApprovalResponseContent,
+)
+
+
+class _RequestInfoMessageFilter:
+    """Proxy that filters messages for request_info HITL.
+
+    When the MAF workflow agent has pending ``request_info``
+    calls, strips messages whose contents do not include
+    ``FunctionResultContent`` or
+    ``FunctionApprovalResponseContent`` so that
+    ``_extract_function_responses()`` does not raise on
+    ``TextContent`` from the full conversation history.
+    """
+
+    def __init__(self, agent: Any) -> None:
+        """Wrap the workflow agent."""
+        object.__setattr__(self, "_agent", agent)
+
+    def __getattr__(self, name: str) -> Any:
+        """Forward attribute access."""
+        return getattr(
+            object.__getattribute__(self, "_agent"),
+            name,
+        )
+
+    def __setattr__(self, name: str, value: Any) -> None:
+        """Forward attribute writes."""
+        setattr(
+            object.__getattribute__(self, "_agent"),
+            name,
+            value,
+        )
+
+    async def run_stream(
+        self,
+        input_messages: list[ChatMessage],
+        **kwargs: Any,
+    ) -> AsyncGenerator:
+        """Filter messages when pending request_info calls exist.
+
+        Parameters:
+            input_messages: Full conversation messages.
+            **kwargs: Forwarded to the inner agent.
+
+        Yields:
+            AgentRunResponseUpdate from the inner agent.
+        """
+        agent = object.__getattribute__(self, "_agent")
+        if hasattr(agent, "pending_requests") and agent.pending_requests:
+            filtered = [
+                msg
+                for msg in input_messages
+                if any(
+                    isinstance(c, _FN_CONTENT_TYPES)
+                    for c in (getattr(msg, "contents", None) or [])
+                )
+            ]
+            if filtered:
+                logger.debug(
+                    "request_info HITL: forwarding %d/%d messages",
+                    len(filtered),
+                    len(input_messages),
+                )
+                input_messages = filtered
+
+        async for update in agent.run_stream(input_messages, **kwargs):
+            yield update
 
 
 # ---------------------------------------------------------------------------
@@ -55,12 +449,24 @@ async def run_agui() -> None:
 
     # Build workflow asynchronously because it returns coroutine-based resources.
     agent, credential = await build_workflow()
+
+    # Use a custom orchestrator chain:
+    #   1. RequestInfoOrchestrator — filters messages when
+    #      the workflow has pending request_info HITL calls.
+    #   2. HumanInTheLoopOrchestrator — handles tool approval
+    #      responses (accept / reject).
+    #   3. DefaultOrchestrator — standard agent execution.
     ag_agent = AgentFrameworkAgent(
         agent=agent,
         name="Certinator AI",
         description=(
             "Multi-agent system for Microsoft certification exam preparation."
         ),
+        orchestrators=[
+            RequestInfoOrchestrator(),
+            HumanInTheLoopOrchestrator(),
+            DefaultOrchestrator(),
+        ],
     )
 
     app = FastAPI(title="Microsoft Agent Framework (Python) - Quickstart")
@@ -131,6 +537,12 @@ async def run_server():
     from workflow import build_workflow
 
     agent, credential = await build_workflow()
+
+    # Wrap in the HITL message filter so that
+    # ``_extract_function_responses()`` does not raise when
+    # CopilotKit replays the full conversation history.
+    # agent = _RequestInfoMessageFilter(agent)
+
     try:
         await from_agent_framework(agent).run_async()
     finally:

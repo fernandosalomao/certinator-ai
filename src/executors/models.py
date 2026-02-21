@@ -232,3 +232,59 @@ class QuizState(BaseModel):
         default_factory=list,
         description="Distinct topic names covered by this quiz.",
     )
+
+
+# ---------------------------------------------------------------------------
+# HITL request payloads
+# ---------------------------------------------------------------------------
+# HITL payloads are now passed as plain dicts (e.g. {"prompt": "..."})
+# to ensure JSON serialisability across the AG-UI bridge.
+# The typed classes below are retained for documentation only.
+#
+#   QuizQuestionRequest   → {"prompt": str}
+#   PostQuizStudyPlanOffer → {"prompt": str}
+#   PostStudyPlanPracticeOffer → {"prompt": str}
+
+
+# ---------------------------------------------------------------------------
+# Cross-workflow routing models
+# ---------------------------------------------------------------------------
+
+
+class StudyPlanFromQuizRequest(BaseModel):
+    """Routes from a failed quiz to the study plan pipeline.
+
+    Emitted by PracticeQuizOrchestrator when the student fails and
+    wants a focused study plan.  Routed to LearningPathFetcherHandler.
+    """
+
+    certification: str = Field(
+        description="Exam code (e.g. AZ-900).",
+    )
+    weak_topics: list[str] = Field(
+        description="Topics the student struggled with.",
+    )
+    quiz_score: int = Field(
+        description="Overall quiz score percentage.",
+    )
+    original_decision: RoutingDecision = Field(
+        description="Routing decision for the study plan pipeline.",
+    )
+
+
+class ApprovedStudyPlanOutput(BaseModel):
+    """Critic-approved study plan forwarded to PostStudyPlanHandler.
+
+    Emitted by CriticExecutor on PASS for study_plan content so that
+    PostStudyPlanHandler can offer practice questions via HITL.
+    """
+
+    content: str = Field(
+        description="The approved study plan text.",
+    )
+    certification: str = Field(
+        description="Exam code (e.g. AZ-900).",
+    )
+    original_decision: RoutingDecision = Field(
+        description="Original routing decision for context.",
+    )

@@ -29,6 +29,7 @@ from agent_framework import (
 
 from executors import emit_response
 from executors.models import (
+    ApprovedStudyPlanOutput,
     CriticVerdict,
     CriticVerdictResponse,
     RevisionRequest,
@@ -107,7 +108,23 @@ class CriticExecutor(Executor):
                     output.iteration,
                     verdict.confidence,
                 )
-            await emit_response(ctx, output.source_executor_id, text)
+
+            # Study plan outputs route to PostStudyPlanHandler
+            # for a HITL practice-question offer.
+            if output.content_type == "study_plan":
+                await ctx.send_message(
+                    ApprovedStudyPlanOutput(
+                        content=text,
+                        certification=(output.original_decision.certification),
+                        original_decision=(output.original_decision),
+                    )
+                )
+            else:
+                await emit_response(
+                    ctx,
+                    output.source_executor_id,
+                    text,
+                )
         else:
             logger.info(
                 "Critic FAIL for %s (iteration %d) — requesting revision",

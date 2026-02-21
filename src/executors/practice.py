@@ -1,13 +1,33 @@
 """
-Certinator AI — Practice Handler Executor
+Certinator AI — Practice Quiz Orchestrator
 
-Non-HITL practice flow for current app runtime.
-Generates a full question set in one response.
+HITL-driven executor that sends all practice questions to the UI
+in a single ``request_info`` call, collects the full set of answers
+back in one payload, scores the quiz, emits a feedback report, and
+optionally routes to the study plan pipeline for weak topics.
+
+Uses ``ctx.request_info()`` / ``@response_handler`` for human-in-the-
+loop interaction following the MAF HITL pattern.  The quiz itself uses
+only **two** HITL round-trips:
+
+1. ``quiz_session``   — all questions sent to the frontend at once.
+2. ``study_plan_offer`` — post-quiz offer (only when the student fails).
+
+Graph position::
+
+    CoordinatorRouter ──► PracticeQuizOrchestrator (HITL)
+                              ├── PASS  → congratulations (terminal)
+                              └── FAIL  → HITL study plan offer
+                                    ├── YES → StudyPlanFromQuizRequest
+                                    │         → LearningPathFetcher pipeline
+                                    └── NO  → end
 """
 
+import json
 import logging
 import re
 from typing import Any
+from uuid import uuid4
 
 from agent_framework import (
     ChatAgent,
@@ -16,22 +36,38 @@ from agent_framework import (
     Role,
     WorkflowContext,
     handler,
+    response_handler,
 )
 
 from config import DEFAULT_PRACTICE_QUESTIONS
 from executors import emit_response, extract_response_text
 from executors.models import (
     LearningPathFetcherResponse,
-    RevisionRequest,
+    PracticeQuestion,
+    QuizState,
     RoutingDecision,
-    SpecialistOutput,
+    StudyPlanFromQuizRequest,
 )
+from tools.practice import score_quiz
 
 logger = logging.getLogger(__name__)
 
+# Shared-state key for persisting quiz state across HITL turns.
+QUIZ_STATE_KEY = "active_quiz_state"
 
-class PracticeHandler(Executor):
-    """Generate practice questions for certification exams."""
+
+class PracticeQuizOrchestrator(Executor):
+    """Orchestrate an interactive practice quiz with HITL flow.
+
+    Responsibilities:
+        1. Fetch exam topics via the learning path agent.
+        2. Generate all questions upfront via the practice agent.
+        3. Send all questions to the frontend in one HITL call.
+        4. Receive the full answer set back in a single response.
+        5. Score the quiz deterministically with ``score_quiz``.
+        6. Generate a feedback report via the practice agent.
+        7. Offer a study plan for weak topics on failure (HITL).
+    """
 
     practice_agent: ChatAgent
     learning_path_agent: ChatAgent
@@ -42,16 +78,21 @@ class PracticeHandler(Executor):
         learning_path_agent: ChatAgent,
         id: str = "practice-handler",
     ):
-        """Initialize practice executor dependencies.
+        """Initialise the practice quiz orchestrator.
 
         Parameters:
-            practice_agent (ChatAgent): Agent used to generate practice output.
-            learning_path_agent (ChatAgent): Agent used to fetch topics.
+            practice_agent (ChatAgent): Agent for question generation
+                and feedback reports.
+            learning_path_agent (ChatAgent): Agent for topic fetching.
             id (str): Executor identifier.
         """
         self.practice_agent = practice_agent
         self.learning_path_agent = learning_path_agent
         super().__init__(id=id)
+
+    # ------------------------------------------------------------------
+    # Entry: generate questions and send the full quiz session
+    # ------------------------------------------------------------------
 
     @handler
     async def handle(
@@ -59,115 +100,583 @@ class PracticeHandler(Executor):
         decision: RoutingDecision,
         ctx: WorkflowContext,
     ) -> None:
-        """Generate questions and stream directly to the user.
+        """Start the quiz: fetch topics, generate questions, present.
+
+        All questions are sent to the frontend in a single
+        ``request_info`` call with type ``quiz_session``.  The
+        frontend renders them one-by-one and submits all answers
+        back in one payload.
 
         Parameters:
-            decision (RoutingDecision): Coordinator decision.
+            decision (RoutingDecision): Coordinator routing decision.
             ctx (WorkflowContext): Workflow context.
         """
         cert = decision.certification or "the requested certification"
         topics = await self._fetch_exam_topics(cert)
         question_count = self._extract_question_count(decision)
 
-        topic_list = "\n".join(
-            f"- {topic.get('name', 'Unknown')} ({topic.get('exam_weight_pct', 0)}%)"
-            for topic in topics
+        # Generate all questions upfront.
+        questions = await self._generate_questions(
+            cert,
+            topics,
+            question_count,
+            decision.context,
         )
 
+        if not questions:
+            await emit_response(
+                ctx,
+                self.id,
+                "I could not generate practice questions at this "
+                "time. Please try again.",
+            )
+            return
+
+        # Build and persist quiz state.
+        quiz_state = QuizState(
+            quiz_id=str(uuid4()),
+            certification=cert,
+            questions=questions,
+            current_index=0,
+            answers=[],
+            status="in_progress",
+            topics=list({q.topic for q in questions}),
+        )
+        await ctx.shared_state.set(
+            QUIZ_STATE_KEY,
+            quiz_state.model_dump(),
+        )
+
+        # Emit intro message.
+        intro = (
+            f"**{cert} Practice Quiz** — "
+            f"{len(questions)} questions\n\n"
+            "Answer each question by selecting "
+            "**A**, **B**, **C**, or **D**.\n"
+            "You'll receive your score and detailed feedback "
+            "at the end.\n\n---"
+        )
+        await emit_response(ctx, self.id, intro)
+
+        # Send ALL questions in a single HITL call.
+        serialised_questions = [
+            {
+                "question_number": q.question_number,
+                "question_text": q.question_text,
+                "options": q.options,
+                "topic": q.topic,
+                "difficulty": q.difficulty,
+            }
+            for q in questions
+        ]
+
+        await ctx.request_info(
+            request_data={
+                "type": "quiz_session",
+                "certification": cert,
+                "questions": serialised_questions,
+                "total_questions": len(questions),
+            },
+            response_type=str,
+        )
+
+    # ------------------------------------------------------------------
+    # HITL: unified response handler
+    # ------------------------------------------------------------------
+
+    @response_handler
+    async def on_hitl_response(
+        self,
+        original_request: dict,
+        answer: str,
+        ctx: WorkflowContext,
+    ) -> None:
+        """Route HITL responses based on quiz state.
+
+        Two possible payloads:
+          - Quiz answers: JSON ``{"answers":{"1":"B","2":"A",...}}``
+          - Study plan offer: plain ``"yes"`` / ``"no"``
+
+        Parameters:
+            original_request (dict): Serialised HITL payload.
+            answer (str): Student's response (JSON or plain text).
+            ctx (WorkflowContext): Workflow context.
+        """
+        state_data = await ctx.shared_state.get(QUIZ_STATE_KEY)
+        if not state_data:
+            await emit_response(
+                ctx,
+                self.id,
+                "Quiz session not found. Please start a new quiz.",
+            )
+            return
+
+        state = QuizState.model_validate(state_data)
+
+        # If quiz is still in progress, this is the bulk answer set.
+        if state.status == "in_progress":
+            await self._process_quiz_answers(state, answer, ctx)
+        else:
+            # Quiz is completed — this is a study plan offer.
+            await self._process_study_plan_offer(
+                state,
+                answer,
+                ctx,
+            )
+
+    # ------------------------------------------------------------------
+    # Bulk quiz answer processing
+    # ------------------------------------------------------------------
+
+    async def _process_quiz_answers(
+        self,
+        state: QuizState,
+        answer: str,
+        ctx: WorkflowContext,
+    ) -> None:
+        """Process the full set of quiz answers in one go.
+
+        Expects a JSON string like ``{"answers":{"1":"B","2":"A"}}``
+        from the frontend.  Falls back to single-letter parsing for
+        backwards compatibility with plain-text responses.
+
+        Parameters:
+            state (QuizState): Current quiz state.
+            answer (str): JSON payload or single letter.
+            ctx (WorkflowContext): Workflow context.
+        """
+        answers_map = self._parse_answer_payload(
+            answer,
+            len(state.questions),
+        )
+
+        # Build ordered answer list aligned to question indices.
+        ordered: list[str] = []
+        for i, q in enumerate(state.questions):
+            q_num = str(q.question_number)
+            letter = answers_map.get(q_num, "X")
+            ordered.append(letter)
+
+        state.answers = ordered
+        state.current_index = len(state.questions)
+        state.status = "completed"
+
+        await ctx.shared_state.set(
+            QUIZ_STATE_KEY,
+            state.model_dump(),
+        )
+        await self._score_and_report(state, ctx)
+
+    @staticmethod
+    def _parse_answer_payload(
+        raw: str,
+        total_questions: int,
+    ) -> dict[str, str]:
+        """Parse answer payload from the frontend.
+
+        Accepts either:
+          - JSON: ``{"answers":{"1":"B","2":"A",...}}``
+          - Single letter: ``"B"`` (legacy, first question only)
+
+        Parameters:
+            raw (str): Raw answer string from HITL.
+            total_questions (int): Expected question count.
+
+        Returns:
+            dict[str, str]: Map of question number → answer letter.
+        """
+        raw = raw.strip()
+
+        # Try JSON first.
+        try:
+            parsed = json.loads(raw)
+            if isinstance(parsed, dict):
+                answers = parsed.get("answers", parsed)
+                if isinstance(answers, dict):
+                    return {str(k): str(v).strip().upper() for k, v in answers.items()}
+        except (json.JSONDecodeError, ValueError):
+            pass
+
+        # Fallback: single letter (legacy / plain-text CLI).
+        normalised = raw.strip().upper()
+        if normalised in ("A", "B", "C", "D"):
+            return {"1": normalised}
+
+        # Try to extract a letter from free text.
+        match = re.search(r"\b([A-D])\b", raw.upper())
+        if match:
+            return {"1": match.group(1)}
+
+        return {}
+
+    # ------------------------------------------------------------------
+    # Study plan offer processing
+    # ------------------------------------------------------------------
+
+    async def _process_study_plan_offer(
+        self,
+        state: QuizState,
+        answer: str,
+        ctx: WorkflowContext,
+    ) -> None:
+        """Handle the student's response to the study plan offer.
+
+        Parameters:
+            state (QuizState): Completed quiz state.
+            answer (str): Student's response (yes/no).
+            ctx (WorkflowContext): Workflow context.
+        """
+        reply = answer.strip().lower()
+        affirmative = (
+            reply
+            in (
+                "yes",
+                "y",
+                "sure",
+                "ok",
+                "okay",
+                "please",
+                "yeah",
+            )
+            or "yes" in reply
+        )
+
+        if affirmative:
+            # Compute weak topics from the quiz results.
+            q_dicts = [q.model_dump() for q in state.questions]
+            result = score_quiz(q_dicts, state.answers)
+            weak = result.get("weak_topics", [])
+            if not weak:
+                weak = state.topics
+
+            await emit_response(
+                ctx,
+                self.id,
+                "Great! I'll create a focused study plan for "
+                f"your weak areas: **{', '.join(weak)}**.\n\n"
+                "Please wait while I prepare it...",
+            )
+
+            # Route to the study plan pipeline.
+            await ctx.send_message(
+                StudyPlanFromQuizRequest(
+                    certification=state.certification,
+                    weak_topics=weak,
+                    quiz_score=result.get(
+                        "overall_percentage",
+                        0,
+                    ),
+                    original_decision=RoutingDecision(
+                        route="study_plan",
+                        task=(
+                            "Create a focused study plan for "
+                            f"{state.certification} targeting "
+                            "weak areas"
+                        ),
+                        certification=state.certification,
+                        context=(
+                            "Focus on weak topics from practice"
+                            f" quiz (score: "
+                            f"{result.get('overall_percentage', 0)}"
+                            f"%): {', '.join(weak)}"
+                        ),
+                    ),
+                )
+            )
+        else:
+            await emit_response(
+                ctx,
+                self.id,
+                "No problem! When you're ready to study or "
+                "practice again, just let me know. Good luck "
+                "with your certification preparation!",
+            )
+
+    # ------------------------------------------------------------------
+    # Internal: question generation
+    # ------------------------------------------------------------------
+
+    async def _generate_questions(
+        self,
+        cert: str,
+        topics: list[dict],
+        count: int,
+        focus_context: str = "",
+    ) -> list[PracticeQuestion]:
+        """Generate practice questions via the practice agent.
+
+        Parameters:
+            cert (str): Certification code.
+            topics (list[dict]): Topics with weights.
+            count (int): Number of questions to generate.
+            focus_context (str): Optional focus area.
+
+        Returns:
+            list[PracticeQuestion]: Parsed questions or empty.
+        """
+        topic_list = "\n".join(
+            f"- {t.get('name', 'Unknown')} ({t.get('exam_weight_pct', 0)}%)"
+            for t in topics
+        )
         prompt = (
-            f"Generate exactly {question_count} multiple-choice questions for {cert}.\n\n"
+            f"Generate exactly {count} multiple-choice "
+            f"questions for {cert}.\n\n"
             f"Topics and weights:\n{topic_list}\n\n"
             "Rules:\n"
             "- At least one question per topic\n"
-            "- Remaining questions proportional to topic weight\n"
+            "- Remaining questions proportional to weight\n"
             "- 4 options (A,B,C,D), exactly one correct\n"
             "- Include correct answer and explanation\n"
-            "- Use clear markdown formatting\n"
+            "- Return ONLY a valid JSON array\n"
         )
-
-        if decision.context:
-            prompt += f"- Focus area: {decision.context}\n"
+        if focus_context:
+            prompt += f"- Focus area: {focus_context}\n"
 
         response = await self.practice_agent.run(
             [ChatMessage(role=Role.USER, text=prompt)]
         )
-        result_text = extract_response_text(
-            response,
-            fallback="I could not generate practice questions at this time.",
-        )
+        raw_text = extract_response_text(response, fallback="[]")
+        return self._parse_questions(raw_text)
 
-        await emit_response(ctx, self.id, result_text)
+    @staticmethod
+    def _parse_questions(
+        raw_text: str,
+    ) -> list[PracticeQuestion]:
+        """Parse JSON question array from agent output.
 
-    @handler
-    async def handle_revision(
-        self,
-        revision: RevisionRequest,
-        ctx: WorkflowContext,
-    ) -> None:
-        """Revise practice output based on critic feedback.
+        Strips markdown code fences if present and validates
+        each question against the PracticeQuestion schema.
 
         Parameters:
-            revision (RevisionRequest): Critic revision payload.
+            raw_text (str): Raw text from the practice agent.
+
+        Returns:
+            list[PracticeQuestion]: Validated question objects.
+        """
+        cleaned = raw_text.strip()
+        # Strip markdown code fences if present.
+        if cleaned.startswith("```"):
+            lines = cleaned.split("\n")
+            lines = [ln for ln in lines if not ln.strip().startswith("```")]
+            cleaned = "\n".join(lines)
+
+        # Remove trailing commas before } or ] (common LLM JSON error).
+        cleaned = re.sub(r",\s*([}\]])", r"\1", cleaned)
+
+        try:
+            data = json.loads(cleaned)
+            if isinstance(data, list):
+                return [PracticeQuestion.model_validate(item) for item in data]
+        except (json.JSONDecodeError, Exception) as exc:
+            logger.warning(
+                "Failed to parse practice questions JSON: %s",
+                exc,
+            )
+        return []
+
+    # ------------------------------------------------------------------
+    # Internal: scoring and feedback
+    # ------------------------------------------------------------------
+
+    async def _score_and_report(
+        self,
+        state: QuizState,
+        ctx: WorkflowContext,
+    ) -> None:
+        """Score the completed quiz and emit feedback.
+
+        On pass (>=70%): congratulates and links to exam scheduling.
+        On fail (<70%): offers a focused study plan via HITL.
+
+        Parameters:
+            state (QuizState): Completed quiz state.
             ctx (WorkflowContext): Workflow context.
         """
-        cert = revision.original_decision.certification or "the certification"
-        feedback_list = "\n".join(f"- {item}" for item in revision.feedback)
+        # Deterministic scoring — no LLM needed for arithmetic.
+        q_dicts = [q.model_dump() for q in state.questions]
+        result = score_quiz(q_dicts, state.answers)
+
+        overall_pct = result["overall_percentage"]
+        passed = result["passed"]
+        weak_topics = result.get("weak_topics", [])
+
+        # Generate feedback report via practice agent (Mode 2).
+        feedback = await self._generate_feedback_report(
+            state,
+            result,
+        )
+        await emit_response(ctx, self.id, feedback)
+
+        if passed:
+            # Congratulations with exam scheduling link.
+            cert_slug = state.certification.lower().replace(" ", "-")
+            url = f"https://learn.microsoft.com/en-us/certifications/exams/{cert_slug}"
+            congrats = (
+                f"\n\nCongratulations! You scored "
+                f"**{overall_pct}%** — that's a passing score!"
+                f"\n\nYou're ready to schedule your "
+                f"{state.certification} exam. Book it here: "
+                f"[{state.certification} Exam Registration]"
+                f"({url})\n\nGood luck!"
+            )
+            await emit_response(ctx, self.id, congrats)
+        else:
+            # Offer a focused study plan for weak topics.
+            weak_str = ", ".join(weak_topics) if weak_topics else "all topics"
+            offer = (
+                f"You scored **{overall_pct}%** — not quite a "
+                "passing score (70% required).\n\n"
+                f"Your weak areas are: **{weak_str}**.\n\n"
+                "Would you like me to create a **focused study "
+                "plan** to help you improve on these topics?"
+            )
+            await ctx.request_info(
+                request_data={
+                    "type": "study_plan_offer",
+                    "prompt": offer,
+                    "certification": state.certification,
+                },
+                response_type=str,
+            )
+
+    async def _generate_feedback_report(
+        self,
+        state: QuizState,
+        score_result: dict,
+    ) -> str:
+        """Generate a detailed feedback report via the practice agent.
+
+        Parameters:
+            state (QuizState): Completed quiz state.
+            score_result (dict): Output from ``score_quiz``.
+
+        Returns:
+            str: Markdown feedback report.
+        """
+        details = []
+        for i, q in enumerate(state.questions):
+            user_ans = state.answers[i] if i < len(state.answers) else "?"
+            details.append(
+                {
+                    "number": q.question_number,
+                    "question": q.question_text,
+                    "correct": q.correct_answer,
+                    "student": user_ans,
+                    "is_correct": user_ans == q.correct_answer,
+                    "explanation": q.explanation,
+                    "topic": q.topic,
+                }
+            )
+
         prompt = (
-            f"Revise and improve the following practice content for {cert}.\n\n"
-            f"Previous content:\n---\n{revision.previous_content}\n---\n\n"
-            f"Reviewer comments:\n{feedback_list}\n\n"
-            "Address all reviewer comments and produce improved output."
+            f"Generate a feedback report for a "
+            f"{state.certification} practice quiz.\n\n"
+            f"Overall score: "
+            f"{score_result['overall_percentage']}% "
+            f"({score_result['correct_answers']}/"
+            f"{score_result['total_questions']})\n"
+            f"Passed: "
+            f"{'Yes' if score_result['passed'] else 'No'}\n\n"
+            "Topic breakdown:\n"
+            f"{json.dumps(score_result['topic_breakdown'], indent=2)}"
+            "\n\nQuestion details:\n"
+            f"{json.dumps(details, indent=2)}\n\n"
+            "Generate a clear Markdown feedback report with:\n"
+            "1. Overall assessment\n"
+            "2. Results summary table "
+            "(topic | correct | total | %)\n"
+            "3. Per-question review (question, student answer, "
+            "correct answer, explanation)\n"
+            "4. Study recommendations for weak topics\n"
         )
 
         response = await self.practice_agent.run(
             [ChatMessage(role=Role.USER, text=prompt)]
         )
-        revised_text = extract_response_text(
+        return extract_response_text(
             response,
-            fallback="Practice content could not be revised.",
+            fallback=self._fallback_feedback(state, score_result),
         )
 
-        await ctx.send_message(
-            SpecialistOutput(
-                content=revised_text,
-                content_type="practice_questions",
-                source_executor_id=self.id,
-                iteration=revision.iteration,
-                original_decision=revision.original_decision,
+    @staticmethod
+    def _fallback_feedback(
+        state: QuizState,
+        score_result: dict,
+    ) -> str:
+        """Build a minimal report when the LLM fails.
+
+        Parameters:
+            state (QuizState): Quiz state.
+            score_result (dict): Scoring data.
+
+        Returns:
+            str: Basic Markdown report.
+        """
+        lines = [
+            f"# {state.certification} Quiz Results\n",
+            f"**Score:** {score_result['overall_percentage']}% "
+            f"({score_result['correct_answers']}/"
+            f"{score_result['total_questions']})\n",
+            "| Topic | Correct | Total | % |",
+            "|---|---:|---:|---:|",
+        ]
+        for tb in score_result.get("topic_breakdown", []):
+            lines.append(
+                f"| {tb['topic']} | {tb['correct']} | "
+                f"{tb['total']} | {tb['percentage']}% |"
             )
-        )
+        return "\n".join(lines)
 
-    async def _fetch_exam_topics(self, cert: str) -> list[dict]:
+    # ------------------------------------------------------------------
+    # Internal: topic fetching and helpers
+    # ------------------------------------------------------------------
+
+    async def _fetch_exam_topics(
+        self,
+        cert: str,
+    ) -> list[dict]:
         """Fetch exam topics and weights from Microsoft Learn.
 
         Parameters:
             cert (str): Certification code.
 
         Returns:
-            list[dict]: Topic list.
+            list[dict]: Topic list with name and weight.
         """
         prompt = (
             f"Certification: {cert}\n\n"
             "Fetch exam topic names and percentage weights. "
-            "Return data matching the configured structured schema."
+            "Return data matching the configured structured "
+            "schema."
         )
-
         response = await self.learning_path_agent.run(
             [ChatMessage(role=Role.USER, text=prompt)],
             response_format=LearningPathFetcherResponse,
         )
-
         topics = self._extract_topic_weights(response)
         if topics:
             return topics
 
-        logger.warning("Practice: failed to parse topics for %s", cert)
-
-        return [{"name": f"{cert} General", "exam_weight_pct": 100}]
+        logger.warning(
+            "Practice: failed to parse topics for %s",
+            cert,
+        )
+        return [
+            {"name": f"{cert} General", "exam_weight_pct": 100},
+        ]
 
     @staticmethod
-    def _extract_topic_weights(response: Any) -> list[dict]:
-        """Extract topic names and weights from structured response output."""
+    def _extract_topic_weights(
+        response: Any,
+    ) -> list[dict]:
+        """Extract topic names and weights from structured response.
+
+        Parameters:
+            response (Any): Agent response.
+
+        Returns:
+            list[dict]: Topic dictionaries.
+        """
         structured = getattr(response, "value", None)
 
         if isinstance(structured, LearningPathFetcherResponse):
@@ -180,7 +689,9 @@ class PracticeHandler(Executor):
             ]
 
         if isinstance(structured, dict):
-            validated = LearningPathFetcherResponse.model_validate(structured)
+            validated = LearningPathFetcherResponse.model_validate(
+                structured,
+            )
             return [
                 {
                     "name": topic.name,
@@ -192,17 +703,47 @@ class PracticeHandler(Executor):
         return []
 
     @staticmethod
-    def _extract_question_count(decision: RoutingDecision) -> int:
+    def _extract_question_count(
+        decision: RoutingDecision,
+    ) -> int:
         """Extract requested question count from user intent.
 
         Parameters:
-            decision (RoutingDecision): Coordinator decision.
+            decision (RoutingDecision): Routing decision.
 
         Returns:
-            int: Clamped question count.
+            int: Clamped question count (1–50).
         """
         text = f"{decision.task} {decision.context}".lower()
         match = re.search(r"(\d+)\s*questions?", text)
         if match:
             return max(1, min(int(match.group(1)), 50))
         return DEFAULT_PRACTICE_QUESTIONS
+
+    @staticmethod
+    def _format_question(
+        question: PracticeQuestion,
+        index: int,
+        total: int,
+    ) -> str:
+        """Format a single question for HITL presentation.
+
+        Parameters:
+            question (PracticeQuestion): The question to format.
+            index (int): 0-based index.
+            total (int): Total number of questions.
+
+        Returns:
+            str: Formatted question markdown.
+        """
+        options_text = "\n".join(
+            f"  **{letter}.** {text}"
+            for letter, text in sorted(question.options.items())
+        )
+        return (
+            f"**Question {index + 1} of {total}** "
+            f"({question.topic} — {question.difficulty})\n\n"
+            f"{question.question_text}\n\n"
+            f"{options_text}\n\n"
+            "Type **A**, **B**, **C**, or **D**:"
+        )

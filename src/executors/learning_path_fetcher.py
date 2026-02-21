@@ -29,6 +29,7 @@ from executors.models import (
     LearningPathFetcherResponse,
     LearningPathsData,
     RoutingDecision,
+    StudyPlanFromQuizRequest,
 )
 
 logger = logging.getLogger(__name__)
@@ -106,6 +107,62 @@ class LearningPathFetcherHandler(Executor):
                 certification=cert,
                 topics=topics,
                 original_decision=decision,
+            )
+        )
+
+    @handler
+    async def handle_quiz_study_plan(
+        self,
+        request: StudyPlanFromQuizRequest,
+        ctx: WorkflowContext,
+    ) -> None:
+        """Fetch learning paths for a post-quiz study plan.
+
+        Triggered when a student fails a practice quiz and wants
+        a focused study plan.  Fetches full topic data and forwards
+        to StudyPlanSchedulerHandler via LearningPathsData.
+
+        Parameters:
+            request (StudyPlanFromQuizRequest): Quiz failure data.
+            ctx (WorkflowContext): Workflow context.
+        """
+        cert = request.certification
+        logger.info(
+            "LearningPathFetcher: fetching paths for "
+            "post-quiz study plan (%s, weak: %s)",
+            cert,
+            request.weak_topics,
+        )
+
+        weak_str = ", ".join(request.weak_topics)
+        prompt = (
+            f"Certification: {cert}\n\n"
+            f"The student needs help with these specific "
+            f"topics: {weak_str}\n\n"
+            "Fetch the exam objectives with percentage "
+            "weights and all official Microsoft Learn "
+            "learning paths (with duration in hours) for "
+            "this certification. Return data that matches "
+            "the configured structured response schema."
+        )
+        messages = [ChatMessage(role=Role.USER, text=prompt)]
+        response = await self.learning_path_agent.run(
+            messages,
+            response_format=LearningPathFetcherResponse,
+        )
+
+        topics = self._extract_topics(response, cert)
+
+        logger.info(
+            "LearningPathFetcher: found %d topics for post-quiz study plan (%s)",
+            len(topics),
+            cert,
+        )
+        await ctx.send_message(
+            LearningPathsData(
+                certification=cert,
+                topics=topics,
+                original_decision=request.original_decision,
             )
         )
 

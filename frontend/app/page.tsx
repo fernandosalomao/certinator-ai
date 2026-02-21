@@ -1,13 +1,28 @@
 "use client";
+
+import { useState, useCallback } from "react";
 import { CopilotChat, type CopilotKitCSSProperties } from "@copilotkit/react-ui";
+import CertinatorHooks from "./components/CertinatorHooks";
+import QuizDashboard from "./components/QuizDashboard";
+import type { CertinatorAgentState } from "./types";
 
 const PROMPT_SUGGESTIONS = [
-  "Compare AZ-104 and AZ-204 for a cloud developer profile.",
-  "Create a 6-week plan for PL-300 with 1 hour on weekdays and 3 hours on weekends.",
-  "Start a 10-question practice quiz for AZ-900 and explain every answer.",
+  "Give me an overview of the AZ-104 certification",
+  "Create a 6-week plan for AI-900 with 1 hour on weekdays and 3 hours on weekends.",
+  "Start a 10-question practice quiz for AI-102.",
 ] as const;
 
 export default function Page() {
+  // Track agent shared state for the sidebar quiz dashboard.
+  const [agentState, setAgentState] = useState<CertinatorAgentState>({});
+
+  const handleStateChange = useCallback(
+    (state: CertinatorAgentState) => setAgentState(state),
+    [],
+  );
+
+  const quiz = agentState.active_quiz_state;
+
   const copilotTheme = {
     "--copilot-kit-primary-color": "#6f87ff",
     "--copilot-kit-contrast-color": "#ffffff",
@@ -26,6 +41,9 @@ export default function Page() {
 
   return (
     <main className="min-h-screen">
+      {/* Register all CopilotKit hooks (HITL, shared state, readables). */}
+      <CertinatorHooks onStateChange={handleStateChange} />
+
       <section className="mx-auto flex w-full max-w-6xl flex-col gap-10 px-6 pb-16 pt-12 md:px-10">
         <div className="hero-panel rounded-3xl p-8 md:p-10">
           <div className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/5 px-3 py-1 text-xs tracking-[0.2em] text-white/80 uppercase">
@@ -69,6 +87,11 @@ export default function Page() {
             </div>
           </div>
         </div>
+
+        {/* Quiz dashboard — visible outside the chat while a quiz is active */}
+        {quiz && quiz.status === "in_progress" && (
+          <QuizDashboard quiz={quiz} />
+        )}
 
         <div
           className="surface-card embedded-chat rounded-2xl p-3 md:p-4"

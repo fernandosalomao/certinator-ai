@@ -10,20 +10,26 @@ Graph topology::
     CoordinatorRouter (start)
         │
         └── switch-case on RoutingDecision.route:
-              ├── "cert_info"  → CertInfoHandler               ──┐
-              ├── "study_plan" → LearningPathFetcherHandler        │
-              │                        │ (LearningPathsData)       │
-              │                        ▼                           │
-              │                  StudyPlanSchedulerHandler ────────┤
-              ├── "practice"   → PracticeHandler ─────────────────┤
-              └── default      → GeneralHandler                   │
-                                                                  │
-    CriticExecutor  ◄─────────────────────────────────────────────┘
-        ├── PASS → emit response (terminal)
-        └── FAIL → RevisionRequest → source handler (loop)
-
-    PracticeHandler also emits directly (in-quiz questions) and only
-    sends the final evaluation through CriticExecutor.
+              ├── "cert_info"  → CertInfoHandler  ──► CriticExecutor
+              │                                         ├── PASS → emit
+              │                                         └── FAIL → revision
+              │
+              ├── "study_plan" → LearningPathFetcherHandler
+              │                        │ (LearningPathsData)
+              │                        ▼
+              │                  StudyPlanSchedulerHandler ──► CriticExecutor
+              │                                                  ├── PASS → PostStudyPlanHandler
+              │                                                  │             ├── HITL YES → PracticeQuizOrchestrator
+              │                                                  │             └── HITL NO  → end
+              │                                                  └── FAIL → revision
+              │
+              ├── "practice"   → PracticeQuizOrchestrator (HITL quiz loop)
+              │                        ├── PASS  → congratulations (terminal)
+              │                        └── FAIL  → HITL study plan offer
+              │                              ├── YES → LearningPathFetcher pipeline
+              │                              └── NO  → end
+              │
+              └── default      → GeneralHandler
 """
 
 import logging
@@ -38,6 +44,7 @@ from agent_framework import (
     TextContent,
     WorkflowBuilder,
     WorkflowContext,
+    WorkflowViz,
     executor,
 )
 from azure.identity.aio import DefaultAzureCredential
@@ -57,8 +64,14 @@ from executors.cert_info import CertInfoHandler
 from executors.coordinator import CoordinatorRouter
 from executors.critic import CriticExecutor
 from executors.learning_path_fetcher import LearningPathFetcherHandler
-from executors.models import RevisionRequest, RoutingDecision
-from executors.practice import PracticeHandler
+from executors.models import (
+    ApprovedStudyPlanOutput,
+    RevisionRequest,
+    RoutingDecision,
+    StudyPlanFromQuizRequest,
+)
+from executors.post_study_plan import PostStudyPlanHandler
+from executors.practice import PracticeQuizOrchestrator
 from executors.study_plan import StudyPlanSchedulerHandler
 from tools.mcp import create_ms_learn_mcp_tool
 from tools.schedule import schedule_study_plan
@@ -108,6 +121,37 @@ def _revision_for(executor_id: str):
         )
 
     return condition
+
+
+def _is_approved_study_plan(msg: Any) -> bool:
+    """Match an ApprovedStudyPlanOutput from the CriticExecutor.
+
+    Used on the conditional edge from CriticExecutor to
+    PostStudyPlanHandler so that only approved study plans
+    are forwarded for the HITL practice-question offer.
+
+    Parameters:
+        msg (Any): Message emitted by CriticExecutor.
+
+    Returns:
+        bool: True if the message is an ApprovedStudyPlanOutput.
+    """
+    return isinstance(msg, ApprovedStudyPlanOutput)
+
+
+def _is_study_plan_from_quiz(msg: Any) -> bool:
+    """Match a StudyPlanFromQuizRequest from PracticeQuizOrchestrator.
+
+    Routes the post-quiz study plan request to
+    LearningPathFetcherHandler.
+
+    Parameters:
+        msg (Any): Message from PracticeQuizOrchestrator.
+
+    Returns:
+        bool: True if the message is a StudyPlanFromQuizRequest.
+    """
+    return isinstance(msg, StudyPlanFromQuizRequest)
 
 
 # ── General-response handler (function-based executor) ────────────────────
@@ -206,13 +250,14 @@ async def build_workflow():
     study_plan_scheduler = StudyPlanSchedulerHandler(
         study_plan_agent=study_plan_agent,
     )
-    practice_handler = PracticeHandler(
+    practice_handler = PracticeQuizOrchestrator(
         practice_agent=practice_agent,
         learning_path_agent=learning_path_agent,
     )
     critic_executor = CriticExecutor(
         critic_agent=critic_agent,
     )
+    post_study_plan_handler = PostStudyPlanHandler()
 
     # ── Build the workflow graph ──────────────────────────────────────
     workflow = (
@@ -238,11 +283,26 @@ async def build_workflow():
         )
         # Specialist → Critic validation edges
         .add_edge(cert_info_handler, critic_executor)
-        # LearningPathFetcher → StudyPlanScheduler (study plan pipeline)
+        # LearningPathFetcher → StudyPlanScheduler pipeline
         .add_edge(learning_path_fetcher, study_plan_scheduler)
         .add_edge(study_plan_scheduler, critic_executor)
-        # Practice → Critic (final quiz evaluation only)
-        .add_edge(practice_handler, critic_executor)
+        # Critic → PostStudyPlanHandler (approved study plans)
+        .add_edge(
+            critic_executor,
+            post_study_plan_handler,
+            condition=_is_approved_study_plan,
+        )
+        # PostStudyPlanHandler → Practice (student wants practice)
+        .add_edge(
+            post_study_plan_handler,
+            practice_handler,
+        )
+        # Practice → LearningPathFetcher (post-quiz study plan)
+        .add_edge(
+            practice_handler,
+            learning_path_fetcher,
+            condition=_is_study_plan_from_quiz,
+        )
         # Critic → Specialist revision loops (conditional)
         .add_edge(
             critic_executor,
@@ -254,13 +314,24 @@ async def build_workflow():
             study_plan_scheduler,
             condition=_revision_for("study-plan-scheduler"),
         )
-        .add_edge(
-            critic_executor,
-            practice_handler,
-            condition=_revision_for("practice-handler"),
-        )
         .build()
     )
+
+    # Generate workflow visualization
+    print("Generating workflow visualization...")
+    viz = WorkflowViz(workflow)
+    # Print out the mermaid string.
+    print("Mermaid string: \n=======")
+    print(viz.to_mermaid())
+    print("=======")
+    # Print out the DiGraph string with internal executors.
+    print("DiGraph string: \n=======")
+    print(viz.to_digraph(include_internal_executors=True))
+    print("=======")
+
+    # Export the DiGraph visualization as SVG.
+    svg_file = viz.export(filename="workflow.svg", format="svg")
+    print(f"SVG file saved to: {svg_file}")
 
     # Wrap as an agent for HTTP serving / CLI
     agent = workflow.as_agent()
