@@ -5,9 +5,9 @@ Non-HITL practice flow for current app runtime.
 Generates a full question set in one response.
 """
 
-import json
 import logging
 import re
+from typing import Any
 
 from agent_framework import (
     ChatAgent,
@@ -20,11 +20,14 @@ from agent_framework import (
 
 from config import DEFAULT_PRACTICE_QUESTIONS
 from executors import emit_response, extract_response_text
-from executors.models import RevisionRequest, RoutingDecision, SpecialistOutput
+from executors.models import (
+    LearningPathFetcherResponse,
+    RevisionRequest,
+    RoutingDecision,
+    SpecialistOutput,
+)
 
 logger = logging.getLogger(__name__)
-
-_JSON_FENCE_RE = re.compile(r"```(?:json)?\s*([\s\S]*?)```", re.IGNORECASE)
 
 
 class PracticeHandler(Executor):
@@ -146,26 +149,47 @@ class PracticeHandler(Executor):
         prompt = (
             f"Certification: {cert}\n\n"
             "Fetch exam topic names and percentage weights. "
-            "Return ONLY JSON object: "
-            '{"certification": "<code>", "topics": '
-            '[{"name": "<topic>", "exam_weight_pct": <number>}]}. '
+            "Return data matching the configured structured schema."
         )
 
         response = await self.learning_path_agent.run(
-            [ChatMessage(role=Role.USER, text=prompt)]
+            [ChatMessage(role=Role.USER, text=prompt)],
+            response_format=LearningPathFetcherResponse,
         )
-        raw = extract_response_text(response)
-        cleaned = self._strip_fences(raw)
 
-        try:
-            data = json.loads(cleaned)
-            topics = data.get("topics", [])
-            if isinstance(topics, list) and topics:
-                return topics
-        except (json.JSONDecodeError, AttributeError):
-            logger.warning("Practice: failed to parse topics for %s", cert)
+        topics = self._extract_topic_weights(response)
+        if topics:
+            return topics
+
+        logger.warning("Practice: failed to parse topics for %s", cert)
 
         return [{"name": f"{cert} General", "exam_weight_pct": 100}]
+
+    @staticmethod
+    def _extract_topic_weights(response: Any) -> list[dict]:
+        """Extract topic names and weights from structured response output."""
+        structured = getattr(response, "value", None)
+
+        if isinstance(structured, LearningPathFetcherResponse):
+            return [
+                {
+                    "name": topic.name,
+                    "exam_weight_pct": topic.exam_weight_pct,
+                }
+                for topic in structured.topics
+            ]
+
+        if isinstance(structured, dict):
+            validated = LearningPathFetcherResponse.model_validate(structured)
+            return [
+                {
+                    "name": topic.name,
+                    "exam_weight_pct": topic.exam_weight_pct,
+                }
+                for topic in validated.topics
+            ]
+
+        return []
 
     @staticmethod
     def _extract_question_count(decision: RoutingDecision) -> int:
@@ -182,16 +206,3 @@ class PracticeHandler(Executor):
         if match:
             return max(1, min(int(match.group(1)), 50))
         return DEFAULT_PRACTICE_QUESTIONS
-
-    @staticmethod
-    def _strip_fences(text: str) -> str:
-        """Strip optional markdown code fences.
-
-        Parameters:
-            text (str): Model output.
-
-        Returns:
-            str: Cleaned text.
-        """
-        match = _JSON_FENCE_RE.search(text)
-        return match.group(1).strip() if match else text.strip()

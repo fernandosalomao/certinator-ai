@@ -13,9 +13,8 @@ Graph position::
     CoordinatorRouter ──► LearningPathFetcherHandler ──► StudyPlanSchedulerHandler
 """
 
-import json
 import logging
-import re
+from typing import Any
 
 from agent_framework import (
     ChatAgent,
@@ -26,19 +25,13 @@ from agent_framework import (
     handler,
 )
 
-from executors import extract_response_text
-from executors.models import LearningPathsData, RoutingDecision
+from executors.models import (
+    LearningPathFetcherResponse,
+    LearningPathsData,
+    RoutingDecision,
+)
 
 logger = logging.getLogger(__name__)
-
-# Regex to strip optional markdown code-fence around a JSON block.
-_JSON_FENCE_RE = re.compile(r"```(?:json)?\s*([\s\S]*?)```", re.IGNORECASE)
-
-
-def _strip_fences(text: str) -> str:
-    """Remove markdown code fences from a string, if present."""
-    match = _JSON_FENCE_RE.search(text)
-    return match.group(1).strip() if match else text.strip()
 
 
 class LearningPathFetcherHandler(Executor):
@@ -49,8 +42,8 @@ class LearningPathFetcherHandler(Executor):
     tool) to search for exam objectives, skill weights, and the
     corresponding official learning paths with their durations.
 
-    The agent is instructed to return a JSON object.  This handler
-    parses it and emits a ``LearningPathsData`` message to the
+    The agent is called with a structured response format and this
+    handler emits a ``LearningPathsData`` message to the
     ``StudyPlanSchedulerHandler``.
     """
 
@@ -92,13 +85,16 @@ class LearningPathFetcherHandler(Executor):
             f"Student request context: {decision.task} — {decision.context}\n\n"
             "Fetch the exam objectives with percentage weights and all "
             "official Microsoft Learn learning paths (with duration in hours) "
-            "for this certification. Return ONLY the required JSON object."
+            "for this certification. Return data that matches the configured "
+            "structured response schema."
         )
         messages = [ChatMessage(role=Role.USER, text=prompt)]
-        response = await self.learning_path_agent.run(messages)
+        response = await self.learning_path_agent.run(
+            messages,
+            response_format=LearningPathFetcherResponse,
+        )
 
-        raw_text = extract_response_text(response)
-        topics = self._parse_topics(raw_text, cert)
+        topics = self._extract_topics(response, cert)
 
         logger.info(
             "LearningPathFetcher: found %d topics for %s",
@@ -118,36 +114,44 @@ class LearningPathFetcherHandler(Executor):
     # ------------------------------------------------------------------
 
     @staticmethod
-    def _parse_topics(text: str, cert: str) -> list[dict]:
+    def _extract_topics(response: Any, cert: str) -> list[dict]:
         """
-        Parse the agent's JSON output into a list of topic dicts.
+        Extract structured topics from an agent response object.
 
-        Falls back to a minimal placeholder on any parse error so the
-        downstream scheduler always receives valid data.
+        Falls back to a minimal placeholder if the structured output is
+        missing or invalid so downstream scheduling always receives data.
 
         Parameters:
-            text (str): Raw text from the fetcher agent.
+            response (Any): Agent run response object.
             cert (str): Certification code for fallback data.
 
         Returns:
             list[dict]: List of topic objects with learning_paths.
         """
-        cleaned = _strip_fences(text)
-        try:
-            data = json.loads(cleaned)
-            topics = data.get("topics", [])
-            if isinstance(topics, list) and topics:
+        structured = getattr(response, "value", None)
+        if isinstance(structured, LearningPathFetcherResponse):
+            topics = [topic.model_dump(mode="python") for topic in structured.topics]
+            if topics:
                 return topics
-        except (json.JSONDecodeError, AttributeError) as exc:
-            logger.warning(
-                "LearningPathFetcher: could not parse JSON (%s). "
-                "Using empty fallback for %s.",
-                exc,
-                cert,
-            )
 
-        # Minimal fallback — scheduler will handle gracefully
-        logger.warning("LearningPathFetcher: returning empty topics for %s", cert)
+        if isinstance(structured, dict):
+            try:
+                validated = LearningPathFetcherResponse.model_validate(structured)
+                topics = [topic.model_dump(mode="python") for topic in validated.topics]
+                if topics:
+                    return topics
+            except Exception as exc:  # pragma: no cover - defensive fallback
+                logger.warning(
+                    "LearningPathFetcher: invalid structured response (%s) for %s.",
+                    exc,
+                    cert,
+                )
+
+        logger.warning(
+            "LearningPathFetcher: structured output missing; "
+            "returning fallback topics for %s",
+            cert,
+        )
         return [
             {
                 "name": f"{cert} — topics unavailable",

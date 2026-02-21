@@ -6,8 +6,8 @@ calls the Coordinator LLM to produce a structured routing decision,
 and forwards the decision downstream via switch-case edges.
 """
 
-import json
 import logging
+from typing import Any
 
 from agent_framework import (
     ChatAgent,
@@ -18,7 +18,7 @@ from agent_framework import (
 )
 
 from executors import extract_response_text
-from executors.models import RoutingDecision
+from executors.models import CoordinatorResponse, RoutingDecision
 
 logger = logging.getLogger(__name__)
 
@@ -30,9 +30,8 @@ class CoordinatorRouter(Executor):
     """
     Analyse user intent and emit a RoutingDecision.
 
-    The Coordinator LLM is instructed to return JSON.  If parsing fails
-    the executor falls back to the ``general`` route so the user always
-    receives a response.
+    Uses structured response_format output and falls back to ``general``
+    route on invalid or missing structured data.
     """
 
     agent: ChatAgent
@@ -70,10 +69,11 @@ class CoordinatorRouter(Executor):
         # Persist the conversation so specialist handlers can retrieve it.
         await ctx.shared_state.set(MESSAGES_KEY, messages)
 
-        response = await self.agent.run(messages)
-        raw_text = extract_response_text(response)
-
-        decision = self._parse_routing(raw_text)
+        response = await self.agent.run(
+            messages,
+            response_format=CoordinatorResponse,
+        )
+        decision = self._extract_routing(response)
         logger.info(
             "Routing → %s (cert=%s)",
             decision.route,
@@ -86,26 +86,39 @@ class CoordinatorRouter(Executor):
     # ------------------------------------------------------------------
 
     @staticmethod
-    def _parse_routing(text: str) -> RoutingDecision:
+    def _extract_routing(response: Any) -> RoutingDecision:
         """
-        Attempt to parse the LLM output as a RoutingDecision.
+        Extract a RoutingDecision from structured response output.
 
-        Falls back to a ``general`` route containing the raw text if the
-        JSON cannot be decoded.
+        Falls back to a ``general`` route containing raw text when the
+        structured payload is missing or invalid.
 
         Parameters:
-            text (str): Raw LLM output (expected JSON).
+            response (Any): Agent response object.
 
         Returns:
             RoutingDecision: Parsed or fallback routing decision.
         """
+        structured = getattr(response, "value", None)
+
         try:
-            data = json.loads(text)
-            return RoutingDecision.model_validate(data)
-        except (json.JSONDecodeError, Exception) as exc:
-            logger.warning("Failed to parse routing JSON: %s", exc)
-            return RoutingDecision(
-                route="general",
-                task="Direct response",
-                response=text,
-            )
+            if isinstance(structured, CoordinatorResponse):
+                return RoutingDecision.model_validate(
+                    structured.model_dump(mode="python")
+                )
+
+            if isinstance(structured, dict):
+                return RoutingDecision.model_validate(structured)
+        except Exception as exc:  # pragma: no cover - defensive fallback
+            logger.warning("Failed to parse structured routing output: %s", exc)
+
+        fallback_text = extract_response_text(response)
+        if not fallback_text.strip():
+            fallback_text = "How can I help you today?"
+
+        logger.warning("Coordinator returned no structured routing decision.")
+        return RoutingDecision(
+            route="general",
+            task="Direct response",
+            response=fallback_text,
+        )

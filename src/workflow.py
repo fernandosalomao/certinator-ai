@@ -34,31 +34,24 @@ from agent_framework import (
     AgentRunUpdateEvent,
     Case,
     Default,
-    MCPStreamableHTTPTool,
     Role,
     TextContent,
     WorkflowBuilder,
     WorkflowContext,
     executor,
 )
-from agent_framework.azure import AzureAIClient
 from azure.identity.aio import DefaultAzureCredential
 
-from agents.instructions import (
-    CERT_INFO_INSTRUCTIONS,
-    COORDINATOR_INSTRUCTIONS,
-    CRITIC_INSTRUCTIONS,
-    LEARNING_PATH_FETCHER_INSTRUCTIONS,
-    PRACTICE_INSTRUCTIONS,
-    STUDY_PLAN_INSTRUCTIONS,
+from agents import (
+    create_cert_info_agent,
+    create_coordinator_agent,
+    create_critic_agent,
+    create_learning_path_fetcher_agent,
+    create_practice_agent,
+    create_study_plan_agent,
 )
 from config import (
-    CERT_INFO_MODEL,
-    COORDINATOR_MODEL,
-    CRITIC_MODEL,
     FOUNDRY_PROJECT_ENDPOINT,
-    PRACTICE_MODEL,
-    STUDY_PLAN_MODEL,
 )
 from executors.cert_info import CertInfoHandler
 from executors.coordinator import CoordinatorRouter
@@ -67,6 +60,7 @@ from executors.learning_path_fetcher import LearningPathFetcherHandler
 from executors.models import RevisionRequest, RoutingDecision
 from executors.practice import PracticeHandler
 from executors.study_plan import StudyPlanSchedulerHandler
+from tools.mcp import create_ms_learn_mcp_tool
 from tools.schedule import schedule_study_plan
 
 logger = logging.getLogger(__name__)
@@ -162,87 +156,42 @@ async def build_workflow():
     """
     credential = DefaultAzureCredential()
 
-    # ── Create per-model AzureAI clients ──────────────────────────────
-    mini_client = AzureAIClient(
-        project_endpoint=FOUNDRY_PROJECT_ENDPOINT,
-        model_deployment_name=COORDINATOR_MODEL,
-        credential=credential,
-    )
-    main_client = AzureAIClient(
-        project_endpoint=FOUNDRY_PROJECT_ENDPOINT,
-        model_deployment_name=CERT_INFO_MODEL,
-        credential=credential,
-    )
-
-    # Create separate clients only when model differs from main_client.
-    study_client = (
-        main_client
-        if STUDY_PLAN_MODEL == CERT_INFO_MODEL
-        else AzureAIClient(
-            project_endpoint=FOUNDRY_PROJECT_ENDPOINT,
-            model_deployment_name=STUDY_PLAN_MODEL,
-            credential=credential,
-        )
-    )
-    practice_client = (
-        main_client
-        if PRACTICE_MODEL == CERT_INFO_MODEL
-        else AzureAIClient(
-            project_endpoint=FOUNDRY_PROJECT_ENDPOINT,
-            model_deployment_name=PRACTICE_MODEL,
-            credential=credential,
-        )
-    )
-    critic_client = (
-        mini_client
-        if CRITIC_MODEL == COORDINATOR_MODEL
-        else AzureAIClient(
-            project_endpoint=FOUNDRY_PROJECT_ENDPOINT,
-            model_deployment_name=CRITIC_MODEL,
-            credential=credential,
-        )
-    )
-
     # ── Create agents ─────────────────────────────────────────────────
-    coordinator_agent = mini_client.create_agent(
-        name="coordinator-agent",
-        instructions=COORDINATOR_INSTRUCTIONS,
+    coordinator_agent = create_coordinator_agent(
+        FOUNDRY_PROJECT_ENDPOINT,
+        credential,
     )
 
     # CertInfo agent with MS Learn MCP tool (client-side for Inspector visibility)
-    mcp_tool = MCPStreamableHTTPTool(
-        name="Microsoft Learn MCP",
-        url="https://learn.microsoft.com/api/mcp",
-        approval_mode="never_require",
-    )
-    cert_info_agent = main_client.create_agent(
-        name="cert-info-agent",
-        instructions=CERT_INFO_INSTRUCTIONS,
-        tools=[mcp_tool],
+    mcp_tool = create_ms_learn_mcp_tool()
+    cert_info_agent = create_cert_info_agent(
+        FOUNDRY_PROJECT_ENDPOINT,
+        credential,
+        mcp_tool,
     )
 
     # LearningPathFetcher agent: uses MCP to retrieve structured topic data
-    learning_path_agent = main_client.create_agent(
-        name="learning-path-fetcher-agent",
-        instructions=LEARNING_PATH_FETCHER_INSTRUCTIONS,
-        tools=[mcp_tool],
+    learning_path_agent = create_learning_path_fetcher_agent(
+        FOUNDRY_PROJECT_ENDPOINT,
+        credential,
+        mcp_tool,
     )
 
     # StudyPlan agent: uses math tool only — NO MCP (data comes from fetcher)
-    study_plan_agent = study_client.create_agent(
-        name="study-plan-agent",
-        instructions=STUDY_PLAN_INSTRUCTIONS,
-        tools=[schedule_study_plan],
+    study_plan_agent = create_study_plan_agent(
+        FOUNDRY_PROJECT_ENDPOINT,
+        credential,
+        schedule_study_plan,
     )
 
-    practice_agent = practice_client.create_agent(
-        name="practice-question-agent",
-        instructions=PRACTICE_INSTRUCTIONS,
+    practice_agent = create_practice_agent(
+        FOUNDRY_PROJECT_ENDPOINT,
+        credential,
     )
 
-    critic_agent = critic_client.create_agent(
-        name="critic-agent",
-        instructions=CRITIC_INSTRUCTIONS,
+    critic_agent = create_critic_agent(
+        FOUNDRY_PROJECT_ENDPOINT,
+        credential,
     )
 
     # ── Instantiate executors ─────────────────────────────────────────

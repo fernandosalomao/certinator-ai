@@ -15,8 +15,8 @@ Graph position::
                    └── FAIL → RevisionRequest → source handler (loop)
 """
 
-import json
 import logging
+from typing import Any
 
 from agent_framework import (
     ChatAgent,
@@ -27,8 +27,13 @@ from agent_framework import (
     handler,
 )
 
-from executors import emit_response, extract_response_text
-from executors.models import CriticVerdict, RevisionRequest, SpecialistOutput
+from executors import emit_response
+from executors.models import (
+    CriticVerdict,
+    CriticVerdictResponse,
+    RevisionRequest,
+    SpecialistOutput,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -143,17 +148,18 @@ class CriticExecutor(Executor):
             f"Review the following {content_type} output and "
             f"validate it.\n\n"
             f"Content to review:\n---\n{content}\n---\n\n"
-            "Respond with your validation JSON."
+            "Return validation matching the configured structured schema."
         )
         messages = [ChatMessage(role=Role.USER, text=prompt)]
 
         try:
-            response = await self.critic_agent.run(messages)
-            verdict_text = extract_response_text(response)
-            data = json.loads(verdict_text)
-            verdict = CriticVerdict.model_validate(data)
-        except (json.JSONDecodeError, IndexError, Exception) as exc:
-            logger.warning("Critic produced unparseable output: %s", exc)
+            response = await self.critic_agent.run(
+                messages,
+                response_format=CriticVerdictResponse,
+            )
+            verdict = self._extract_verdict(response)
+        except Exception as exc:  # pragma: no cover - defensive fallback
+            logger.warning("Critic produced invalid structured output: %s", exc)
             verdict = CriticVerdict(verdict="PASS", confidence=50)
 
         if verdict.verdict == "FAIL":
@@ -164,3 +170,16 @@ class CriticExecutor(Executor):
             )
 
         return verdict
+
+    @staticmethod
+    def _extract_verdict(response: Any) -> CriticVerdict:
+        """Extract a CriticVerdict from the structured response payload."""
+        structured = getattr(response, "value", None)
+
+        if isinstance(structured, CriticVerdictResponse):
+            return CriticVerdict.model_validate(structured.model_dump(mode="python"))
+
+        if isinstance(structured, dict):
+            return CriticVerdict.model_validate(structured)
+
+        raise ValueError("Missing structured critic verdict")

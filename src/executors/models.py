@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 # ---------------------------------------------------------------------------
 # Re-exports for convenience
@@ -38,6 +38,22 @@ class RoutingDecision(BaseModel):
     )
 
 
+class CoordinatorResponse(BaseModel):
+    """Strict response schema used with response_format for Coordinator."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    route: Literal["cert_info", "study_plan", "practice", "general"] = Field(
+        description="Target specialist route.",
+    )
+    task: str = Field(description="Clear task description for the specialist.")
+    certification: str = Field(description="Exam code such as AZ-104 or AZ-305.")
+    context: str = Field(description="Additional user context.")
+    response: str = Field(
+        description="Direct response text; used for general route.",
+    )
+
+
 class CriticVerdict(BaseModel):
     """Structured validation result from the Critic agent."""
 
@@ -45,6 +61,17 @@ class CriticVerdict(BaseModel):
     confidence: int = Field(default=80, ge=0, le=100)
     issues: list[str] = Field(default_factory=list)
     suggestions: list[str] = Field(default_factory=list)
+
+
+class CriticVerdictResponse(BaseModel):
+    """Strict response schema used with response_format for Critic."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    verdict: Literal["PASS", "FAIL"] = Field()
+    confidence: int = Field(ge=0, le=100)
+    issues: list[str] = Field()
+    suggestions: list[str] = Field()
 
 
 class SpecialistOutput(BaseModel):
@@ -72,19 +99,36 @@ class SpecialistOutput(BaseModel):
     )
 
 
-class LearningPath(BaseModel):
-    """A single Microsoft Learn learning path with its exam-topic binding."""
+class LearningPathItem(BaseModel):
+    """A single Microsoft Learn learning path item."""
+
+    model_config = ConfigDict(extra="forbid")
 
     name: str = Field(description="Title of the learning path.")
     url: str = Field(description="MS Learn URL for the learning path.")
-    topic: str = Field(description="Exam topic this path covers.")
-    duration_hours: float = Field(
-        default=0.0,
-        description="Estimated completion time in hours.",
+    duration_hours: float = Field(description="Estimated completion time in hours.")
+
+
+class LearningPathTopic(BaseModel):
+    """One exam topic with its weighted percentage and learning paths."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    name: str = Field(description="Official exam topic name.")
+    exam_weight_pct: float = Field(description="Exam weight (0-100) for this topic.")
+    learning_paths: list[LearningPathItem] = Field(
+        description="Official Microsoft Learn paths that cover this topic.",
     )
-    exam_weight_pct: float = Field(
-        default=0.0,
-        description="Exam weight (0-100) of the topic this path belongs to.",
+
+
+class LearningPathFetcherResponse(BaseModel):
+    """Structured response schema for LearningPathFetcher agent output."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    certification: str = Field(description="Exam code such as AZ-900 or AZ-104.")
+    topics: list[LearningPathTopic] = Field(
+        description="Topic list with weighted coverage and learning paths.",
     )
 
 

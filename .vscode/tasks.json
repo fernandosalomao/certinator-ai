@@ -46,7 +46,7 @@
     {
       "label": "Run Agent in Terminal",
       "type": "shell",
-      "command": "${command:python.interpreterPath} -m debugpy --listen 127.0.0.1:5679 -m agentdev run src/app.py --cli",
+      "command": "${command:python.interpreterPath} -m debugpy --listen 127.0.0.1:5679 src/app.py --cli",
       "isBackground": true,
       "options": {
         "cwd": "${workspaceFolder}"

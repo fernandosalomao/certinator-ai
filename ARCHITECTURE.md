@@ -402,3 +402,5 @@ Service Outage: MCP Server is down
 ```
 
 ---
+
+# Examples (MAF)
