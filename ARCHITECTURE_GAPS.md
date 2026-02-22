@@ -18,7 +18,7 @@ This document identifies gaps between the current implementation and the [requir
 
 | # | Gap | Requirement Area | Severity | Effort | Status |
 |---|-----|-----------------|----------|--------|--------|
-| G1 | [No error boundaries on agent/MCP calls](#g1-no-error-boundaries-on-agentmcp-calls) | Reliability & Safety | **Critical** | Low | ❌ Missing |
+| G1 | [No error boundaries on agent/MCP calls](#g1-no-error-boundaries-on-agentmcp-calls) | Reliability & Safety | **Critical** | Low | ✅ Implemented |
 | G2 | [Critic lacks user-request context](#g2-critic-lacks-user-request-context) | Accuracy & Relevance | **High** | Low | ❌ Missing |
 | G3 | [Practice questions not validated before delivery](#g3-practice-questions-not-validated-before-delivery) | Accuracy & Relevance | **High** | Low | ❌ Missing |
 | G4 | [Missing custom OTel metrics for quality signals](#g4-missing-custom-otel-metrics-for-quality-signals) | Evaluations & Telemetry | **High** | Low | ❌ Missing |

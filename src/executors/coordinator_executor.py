@@ -17,7 +17,12 @@ from agent_framework import (
     handler,
 )
 
-from executors import extract_response_text, update_workflow_progress
+from executors import (
+    emit_response,
+    extract_response_text,
+    safe_agent_run,
+    update_workflow_progress,
+)
 from executors.models import CoordinatorResponse, RoutingDecision
 
 logger = logging.getLogger(__name__)
@@ -38,7 +43,7 @@ class CoordinatorExecutor(Executor):
         Initialise the Coordinator executor.
 
         Parameters:
-            agent (ChatAgent): Coordinator chat agent (gpt-4.1-mini).
+            agent (ChatAgent): Coordinator chat agent.
             id (str): Executor identifier in the workflow graph.
         """
         self.agent = agent
@@ -62,10 +67,24 @@ class CoordinatorExecutor(Executor):
             ctx (WorkflowContext[RoutingDecision]): Typed context that
                 sends a RoutingDecision to downstream nodes.
         """
-        response = await self.agent.run(
-            messages,
-            response_format=CoordinatorResponse,
-        )
+        try:
+            response = await safe_agent_run(
+                self.agent,
+                messages,
+                response_format=CoordinatorResponse,
+            )
+        except Exception as exc:
+            logger.error(
+                "Coordinator agent call failed: %s",
+                exc,
+                exc_info=True,
+            )
+            await emit_response(
+                ctx,
+                self.id,
+                "I encountered an issue processing your request. Please try again.",
+            )
+            return
         decision = self._extract_routing(response)
         logger.info(
             "Routing → %s (cert=%s)",

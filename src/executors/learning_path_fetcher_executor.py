@@ -25,7 +25,7 @@ from agent_framework import (
     handler,
 )
 
-from executors import update_workflow_progress
+from executors import emit_response, safe_agent_run, update_workflow_progress
 from executors.models import (
     LearningPathFetcherResponse,
     LearningPathsData,
@@ -99,10 +99,25 @@ class LearningPathFetcherExecutor(Executor):
             "structured response schema."
         )
         messages = [ChatMessage(role=Role.USER, text=prompt)]
-        response = await self.learning_path_agent.run(
-            messages,
-            response_format=LearningPathFetcherResponse,
-        )
+        try:
+            response = await safe_agent_run(
+                self.learning_path_agent,
+                messages,
+                response_format=LearningPathFetcherResponse,
+            )
+        except Exception as exc:
+            logger.error(
+                "LearningPathFetcher agent call failed for %s: %s",
+                cert,
+                exc,
+                exc_info=True,
+            )
+            await emit_response(
+                ctx,
+                self.id,
+                "I encountered an issue retrieving that information. Please try again.",
+            )
+            return
 
         topics = self._extract_topics(response, cert)
 
@@ -163,10 +178,25 @@ class LearningPathFetcherExecutor(Executor):
             "the configured structured response schema."
         )
         messages = [ChatMessage(role=Role.USER, text=prompt)]
-        response = await self.learning_path_agent.run(
-            messages,
-            response_format=LearningPathFetcherResponse,
-        )
+        try:
+            response = await safe_agent_run(
+                self.learning_path_agent,
+                messages,
+                response_format=LearningPathFetcherResponse,
+            )
+        except Exception as exc:
+            logger.error(
+                "LearningPathFetcher agent call failed for post-quiz plan (%s): %s",
+                cert,
+                exc,
+                exc_info=True,
+            )
+            await emit_response(
+                ctx,
+                self.id,
+                "I encountered an issue retrieving that information. Please try again.",
+            )
+            return
 
         topics = self._extract_topics(response, cert)
 

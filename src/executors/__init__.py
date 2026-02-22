@@ -5,6 +5,7 @@ Shared utilities used by all executor modules.
 """
 
 import json
+import logging
 from datetime import datetime, timezone
 from typing import Any
 from uuid import uuid4
@@ -18,6 +19,88 @@ from agent_framework import (
     TextContent,
     WorkflowContext,
 )
+from tenacity import (
+    AsyncRetrying,
+    retry_if_exception,
+    stop_after_attempt,
+    wait_exponential,
+)
+
+logger = logging.getLogger(__name__)
+
+# ---------------------------------------------------------------------------
+# Transient error detection
+# ---------------------------------------------------------------------------
+
+_TRANSIENT_TYPES: tuple[type[BaseException], ...] = (
+    TimeoutError,
+    OSError,
+    ConnectionError,
+)
+
+try:
+    import httpx
+
+    _TRANSIENT_TYPES = _TRANSIENT_TYPES + (httpx.TimeoutException,)
+except ImportError:  # pragma: no cover — httpx not always installed
+    pass
+
+
+def _is_transient_error(exc: BaseException) -> bool:
+    """Return True when *exc* is a transient network/timeout failure.
+
+    Transient errors are retried with exponential backoff. All other
+    exceptions are re-raised immediately after the first attempt.
+
+    Parameters:
+        exc (BaseException): The exception to classify.
+
+    Returns:
+        bool: True if the error is transient and should be retried.
+    """
+    return isinstance(exc, _TRANSIENT_TYPES)
+
+
+# ---------------------------------------------------------------------------
+# Safe agent runner with retry
+# ---------------------------------------------------------------------------
+
+
+async def safe_agent_run(agent: Any, *args: Any, **kwargs: Any) -> Any:
+    """Run an agent with automatic retry on transient failures.
+
+    Wraps ``agent.run(*args, **kwargs)`` with up to 3 attempts.
+    Transient errors (timeouts, connection errors) are retried with
+    exponential backoff (1 s → 10 s). Non-transient errors are re-raised
+    on the first attempt so callers can handle them immediately.
+
+    Parameters:
+        agent (Any): Agent instance with an async ``run()`` method.
+        *args (Any): Positional arguments forwarded to ``agent.run()``.
+        **kwargs (Any): Keyword arguments forwarded to ``agent.run()``.
+
+    Returns:
+        Any: The response from ``agent.run()``.
+
+    Raises:
+        Exception: Any exception not classified as transient, or the
+            final transient exception after all retries are exhausted.
+    """
+    attempt_number = 0
+    async for attempt in AsyncRetrying(
+        retry=retry_if_exception(_is_transient_error),
+        stop=stop_after_attempt(3),
+        wait=wait_exponential(multiplier=1, min=1, max=10),
+        reraise=True,
+    ):
+        with attempt:
+            attempt_number += 1
+            if attempt_number > 1:
+                logger.warning(
+                    "safe_agent_run: retrying agent call (attempt %d)",
+                    attempt_number,
+                )
+            return await agent.run(*args, **kwargs)
 
 
 def extract_response_text(

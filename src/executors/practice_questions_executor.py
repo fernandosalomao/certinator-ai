@@ -40,7 +40,12 @@ from agent_framework import (
 )
 
 from config import DEFAULT_PRACTICE_QUESTIONS
-from executors import emit_response, emit_state_snapshot, extract_response_text
+from executors import (
+    emit_response,
+    emit_state_snapshot,
+    extract_response_text,
+    safe_agent_run,
+)
 from executors.models import (
     LearningPathFetcherResponse,
     PracticeQuestion,
@@ -116,12 +121,27 @@ class PracticeQuestionsExecutor(Executor):
         question_count = self._extract_question_count(decision)
 
         # Generate all questions upfront.
-        questions = await self._generate_questions(
-            cert,
-            topics,
-            question_count,
-            decision.context,
-        )
+        try:
+            questions = await self._generate_questions(
+                cert,
+                topics,
+                question_count,
+                decision.context,
+            )
+        except Exception as exc:
+            logger.error(
+                "PracticeQuestions: question generation failed for %s: %s",
+                cert,
+                exc,
+                exc_info=True,
+            )
+            await emit_response(
+                ctx,
+                self.id,
+                "I encountered an issue generating practice questions. "
+                "Please try again.",
+            )
+            return
 
         if not questions:
             await emit_response(
@@ -446,8 +466,9 @@ class PracticeQuestionsExecutor(Executor):
         if focus_context:
             prompt += f"- Focus area: {focus_context}\n"
 
-        response = await self.practice_agent.run(
-            [ChatMessage(role=Role.USER, text=prompt)]
+        response = await safe_agent_run(
+            self.practice_agent,
+            [ChatMessage(role=Role.USER, text=prompt)],
         )
         raw_text = extract_response_text(response, fallback="[]")
         return self._parse_questions(raw_text)
@@ -604,13 +625,22 @@ class PracticeQuestionsExecutor(Executor):
             "4. Study recommendations for weak topics\n"
         )
 
-        response = await self.practice_agent.run(
-            [ChatMessage(role=Role.USER, text=prompt)]
-        )
-        return extract_response_text(
-            response,
-            fallback=self._fallback_feedback(state, score_result),
-        )
+        try:
+            response = await safe_agent_run(
+                self.practice_agent,
+                [ChatMessage(role=Role.USER, text=prompt)],
+            )
+            return extract_response_text(
+                response,
+                fallback=self._fallback_feedback(state, score_result),
+            )
+        except Exception as exc:
+            logger.error(
+                "PracticeQuestions: feedback report generation failed: %s",
+                exc,
+                exc_info=True,
+            )
+            return self._fallback_feedback(state, score_result)
 
     @staticmethod
     def _fallback_feedback(
@@ -663,10 +693,20 @@ class PracticeQuestionsExecutor(Executor):
             "Return data matching the configured structured "
             "schema."
         )
-        response = await self.learning_path_agent.run(
-            [ChatMessage(role=Role.USER, text=prompt)],
-            response_format=LearningPathFetcherResponse,
-        )
+        try:
+            response = await safe_agent_run(
+                self.learning_path_agent,
+                [ChatMessage(role=Role.USER, text=prompt)],
+                response_format=LearningPathFetcherResponse,
+            )
+        except Exception as exc:
+            logger.error(
+                "PracticeQuestions: topic fetch failed for %s: %s",
+                cert,
+                exc,
+                exc_info=True,
+            )
+            return [{"name": f"{cert} General", "exam_weight_pct": 100}]
         topics = self._extract_topic_weights(response)
         if topics:
             return topics

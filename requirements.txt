@@ -27,6 +27,9 @@ agent-dev-cli
 # Pydantic (structured data models for inter-agent messaging)
 pydantic
 
+# Retry with exponential backoff for transient Azure/MCP failures
+tenacity>=8.2.0
+
 # OpenTelemetry tracing (gRPC exporter for AI Toolkit)
 opentelemetry-exporter-otlp-proto-grpc
 

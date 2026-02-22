@@ -27,7 +27,7 @@ from agent_framework import (
     handler,
 )
 
-from executors import emit_response, update_workflow_progress
+from executors import emit_response, safe_agent_run, update_workflow_progress
 from executors.models import (
     ApprovedStudyPlanOutput,
     CriticVerdict,
@@ -202,13 +202,18 @@ class CriticExecutor(Executor):
         messages = [ChatMessage(role=Role.USER, text=prompt)]
 
         try:
-            response = await self.critic_agent.run(
+            response = await safe_agent_run(
+                self.critic_agent,
                 messages,
                 response_format=CriticVerdictResponse,
             )
             verdict = self._extract_verdict(response)
-        except Exception as exc:  # pragma: no cover - defensive fallback
-            logger.warning("Critic produced invalid structured output: %s", exc)
+        except Exception as exc:
+            logger.error(
+                "Critic agent call failed; auto-approving with PASS: %s",
+                exc,
+                exc_info=True,
+            )
             verdict = CriticVerdict(verdict="PASS", confidence=50)
 
         if verdict.verdict == "FAIL":

@@ -23,7 +23,12 @@ from agent_framework import (
     handler,
 )
 
-from executors import extract_response_text, update_workflow_progress
+from executors import (
+    emit_response,
+    extract_response_text,
+    safe_agent_run,
+    update_workflow_progress,
+)
 from executors.models import RevisionRequest, RoutingDecision, SpecialistOutput
 
 logger = logging.getLogger(__name__)
@@ -76,7 +81,20 @@ class CertificationInfoExecutor(Executor):
             current_step=2,
             total_steps=3,
         )
-        result_text = await self._fetch_cert_info(decision)
+        try:
+            result_text = await self._fetch_cert_info(decision)
+        except Exception as exc:
+            logger.error(
+                "CertificationInfo agent call failed: %s",
+                exc,
+                exc_info=True,
+            )
+            await emit_response(
+                ctx,
+                self.id,
+                "I encountered an issue retrieving that information. Please try again.",
+            )
+            return
         await ctx.send_message(
             SpecialistOutput(
                 content=result_text,
@@ -126,7 +144,20 @@ class CertificationInfoExecutor(Executor):
             revision.iteration,
             cert,
         )
-        response = await self.cert_info_agent.run(messages)
+        try:
+            response = await safe_agent_run(self.cert_info_agent, messages)
+        except Exception as exc:
+            logger.error(
+                "CertificationInfo revision agent call failed: %s",
+                exc,
+                exc_info=True,
+            )
+            await emit_response(
+                ctx,
+                self.id,
+                "I encountered an issue refining that information. Please try again.",
+            )
+            return
         result_text = extract_response_text(
             response,
             fallback="I could not retrieve certification information.",
@@ -168,7 +199,7 @@ class CertificationInfoExecutor(Executor):
         messages = [ChatMessage(role=Role.USER, text=prompt)]
 
         logger.info("CertificationInfo agent processing: %s", cert)
-        response = await self.cert_info_agent.run(messages)
+        response = await safe_agent_run(self.cert_info_agent, messages)
         return extract_response_text(
             response,
             fallback="I could not retrieve certification information.",

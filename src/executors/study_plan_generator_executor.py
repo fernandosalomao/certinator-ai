@@ -29,7 +29,12 @@ from agent_framework import (
     handler,
 )
 
-from executors import extract_response_text, update_workflow_progress
+from executors import (
+    emit_response,
+    extract_response_text,
+    safe_agent_run,
+    update_workflow_progress,
+)
 from executors.models import LearningPathsData, RevisionRequest, SpecialistOutput
 from tools.schedule import schedule_study_plan
 
@@ -91,7 +96,20 @@ class StudyPlanGeneratorExecutor(Executor):
             current_step=3,
             total_steps=5,
         )
-        plan_text = await self._generate_plan(data)
+        try:
+            plan_text = await self._generate_plan(data)
+        except Exception as exc:
+            logger.error(
+                "StudyPlanGenerator agent call failed: %s",
+                exc,
+                exc_info=True,
+            )
+            await emit_response(
+                ctx,
+                self.id,
+                "I encountered an issue generating the study plan. Please try again.",
+            )
+            return
         await ctx.send_message(
             SpecialistOutput(
                 content=plan_text,
@@ -143,7 +161,20 @@ class StudyPlanGeneratorExecutor(Executor):
             revision.iteration,
             cert,
         )
-        response = await self.study_plan_agent.run(plan_messages)
+        try:
+            response = await safe_agent_run(self.study_plan_agent, plan_messages)
+        except Exception as exc:
+            logger.error(
+                "StudyPlanGenerator revision agent call failed: %s",
+                exc,
+                exc_info=True,
+            )
+            await emit_response(
+                ctx,
+                self.id,
+                "I encountered an issue refining the study plan. Please try again.",
+            )
+            return
         plan_text = extract_response_text(
             response,
             fallback="I could not generate a study plan at this time.",
@@ -215,7 +246,16 @@ class StudyPlanGeneratorExecutor(Executor):
         plan_messages = [ChatMessage(role=Role.USER, text=prompt)]
 
         logger.info("StudyPlanGenerator: generating plan for %s", cert)
-        response = await self.study_plan_agent.run(plan_messages)
+        try:
+            response = await safe_agent_run(self.study_plan_agent, plan_messages)
+        except Exception as exc:
+            logger.error(
+                "StudyPlanGenerator agent call failed for %s: %s",
+                cert,
+                exc,
+                exc_info=True,
+            )
+            raise
         plan_text = extract_response_text(
             response,
             fallback="I could not generate a study plan at this time.",
