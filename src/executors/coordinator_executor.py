@@ -17,6 +17,7 @@ from agent_framework import (
     handler,
 )
 
+import metrics
 from executors import (
     emit_response,
     extract_response_text,
@@ -91,6 +92,7 @@ class CoordinatorExecutor(Executor):
             decision.route,
             decision.certification or "n/a",
         )
+        metrics.routing_decisions.add(1, {"route": decision.route})
 
         route_totals = {
             "certification-info": 3,

@@ -22,6 +22,7 @@ from agent_framework import (
     response_handler,
 )
 
+import metrics
 from executors import emit_response, emit_state_snapshot, update_workflow_progress
 from executors.models import (
     ApprovedStudyPlanOutput,
@@ -144,6 +145,11 @@ class PostStudyPlanExecutor(Executor):
                 "yeah",
             )
             or "yes" in reply
+        )
+
+        metrics.hitl_practice_offers.add(
+            1,
+            {"accepted": str(affirmative).lower()},
         )
 
         # Retrieve stored certification context.

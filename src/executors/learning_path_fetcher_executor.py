@@ -25,6 +25,7 @@ from agent_framework import (
     handler,
 )
 
+import metrics
 from executors import emit_response, safe_agent_run, update_workflow_progress
 from executors.models import (
     LearningPathFetcherResponse,
@@ -105,7 +106,15 @@ class LearningPathFetcherExecutor(Executor):
                 messages,
                 response_format=LearningPathFetcherResponse,
             )
+            metrics.mcp_calls.add(
+                1,
+                {"executor": "learning-path-fetcher", "status": "success"},
+            )
         except Exception as exc:
+            metrics.mcp_calls.add(
+                1,
+                {"executor": "learning-path-fetcher", "status": "error"},
+            )
             logger.error(
                 "LearningPathFetcher agent call failed for %s: %s",
                 cert,
@@ -184,7 +193,15 @@ class LearningPathFetcherExecutor(Executor):
                 messages,
                 response_format=LearningPathFetcherResponse,
             )
+            metrics.mcp_calls.add(
+                1,
+                {"executor": "learning-path-fetcher", "status": "success"},
+            )
         except Exception as exc:
+            metrics.mcp_calls.add(
+                1,
+                {"executor": "learning-path-fetcher", "status": "error"},
+            )
             logger.error(
                 "LearningPathFetcher agent call failed for post-quiz plan (%s): %s",
                 cert,

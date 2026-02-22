@@ -39,6 +39,7 @@ from agent_framework import (
     response_handler,
 )
 
+import metrics
 from config import DEFAULT_PRACTICE_QUESTIONS
 from executors import (
     emit_response,
@@ -378,6 +379,11 @@ class PracticeQuestionsExecutor(Executor):
             or "yes" in reply
         )
 
+        metrics.hitl_study_plan_offers.add(
+            1,
+            {"accepted": str(affirmative).lower()},
+        )
+
         if affirmative:
             # Compute weak topics from the quiz results.
             q_dicts = [q.model_dump() for q in state.questions]
@@ -626,6 +632,15 @@ class PracticeQuestionsExecutor(Executor):
         overall_pct = result["overall_percentage"]
         passed = result["passed"]
         weak_topics = result.get("weak_topics", [])
+
+        # Emit quiz score metrics.
+        cert_label = state.certification or "unknown"
+        metrics.quiz_scores.record(overall_pct, {"certification": cert_label})
+        for tb in result.get("topic_breakdown", []):
+            metrics.quiz_topic_scores.record(
+                tb["percentage"],
+                {"topic": tb.get("topic", "unknown"), "certification": cert_label},
+            )
 
         # Generate feedback report via practice agent (Mode 2).
         feedback = await self._generate_feedback_report(

@@ -34,6 +34,15 @@ from agent_framework_ag_ui._orchestrators import (
     Orchestrator,
 )
 from dotenv import load_dotenv
+from opentelemetry import metrics as otel_metrics
+from opentelemetry.exporter.otlp.proto.grpc.metric_exporter import (
+    OTLPMetricExporter,
+)
+from opentelemetry.sdk.metrics import MeterProvider
+from opentelemetry.sdk.metrics.export import (
+    ConsoleMetricExporter,
+    PeriodicExportingMetricReader,
+)
 
 from executors import extract_message_text
 
@@ -93,6 +102,32 @@ configure_otel_providers(
     vs_code_extension_port=4317,  # AI Toolkit gRPC port
     enable_sensitive_data=True,  # Capture prompts and completions
 )
+
+# ---------------------------------------------------------------------------
+# OpenTelemetry Metrics
+# ---------------------------------------------------------------------------
+# configure_otel_providers only registers a TracerProvider.  We register a
+# MeterProvider separately so that the custom instruments in metrics.py
+# actually export data.
+#
+# Two readers are used:
+#   1. OTLPMetricExporter → same gRPC collector on port 4317 that receives
+#      traces.  Metrics appear in any OTLP-compatible backend (e.g. the AI
+#      Toolkit collector, piped to Prometheus/Grafana).
+#   2. ConsoleMetricExporter → prints a snapshot to stdout every 60 s so
+#      you can verify signals locally without any extra infrastructure.
+#      Remove or disable in production.
+_metric_readers = [
+    PeriodicExportingMetricReader(
+        OTLPMetricExporter(endpoint="http://localhost:4317", insecure=True),
+        export_interval_millis=60_000,  # flush every 60 s
+    ),
+    PeriodicExportingMetricReader(
+        ConsoleMetricExporter(),
+        export_interval_millis=60_000,  # print snapshot every 60 s
+    ),
+]
+otel_metrics.set_meter_provider(MeterProvider(metric_readers=_metric_readers))
 
 
 # ---------------------------------------------------------------------------

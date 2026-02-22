@@ -23,6 +23,7 @@ from agent_framework import (
     handler,
 )
 
+import metrics
 from executors import (
     emit_response,
     extract_response_text,
@@ -83,7 +84,15 @@ class CertificationInfoExecutor(Executor):
         )
         try:
             result_text = await self._fetch_cert_info(decision)
+            metrics.mcp_calls.add(
+                1,
+                {"executor": "certification-info", "status": "success"},
+            )
         except Exception as exc:
+            metrics.mcp_calls.add(
+                1,
+                {"executor": "certification-info", "status": "error"},
+            )
             logger.error(
                 "CertificationInfo agent call failed: %s",
                 exc,
@@ -146,7 +155,15 @@ class CertificationInfoExecutor(Executor):
         )
         try:
             response = await safe_agent_run(self.cert_info_agent, messages)
+            metrics.mcp_calls.add(
+                1,
+                {"executor": "certification-info", "status": "success"},
+            )
         except Exception as exc:
+            metrics.mcp_calls.add(
+                1,
+                {"executor": "certification-info", "status": "error"},
+            )
             logger.error(
                 "CertificationInfo revision agent call failed: %s",
                 exc,

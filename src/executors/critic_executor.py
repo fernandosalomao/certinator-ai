@@ -27,6 +27,7 @@ from agent_framework import (
     handler,
 )
 
+import metrics
 from executors import emit_response, safe_agent_run, update_workflow_progress
 from executors.models import (
     ApprovedStudyPlanOutput,
@@ -105,6 +106,18 @@ class CriticExecutor(Executor):
             output.content_type,
             task=output.original_decision.task,
             context=output.original_decision.context,
+        )
+
+        auto_approved = (
+            verdict.verdict == "FAIL" and output.iteration >= MAX_CRITIC_ITERATIONS
+        )
+        metrics.critic_verdicts.add(
+            1,
+            {
+                "verdict": verdict.verdict,
+                "content_type": output.content_type,
+                "auto_approved": str(auto_approved).lower(),
+            },
         )
 
         if verdict.verdict == "PASS" or output.iteration >= MAX_CRITIC_ITERATIONS:
