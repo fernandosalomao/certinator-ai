@@ -764,6 +764,29 @@ a.copilotKitMarkdownElement:hover,
   z-index: 1;
 }
 
+/* Column wrapper for message + reasoning sub-line */
+.workflow-progress__step-body {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+  position: relative;
+  z-index: 1;
+}
+
+/* Muted reasoning sub-line shown below the step message */
+.workflow-progress__step-reasoning {
+  display: block;
+  font-size: 0.72rem;
+  font-style: italic;
+  color: var(--muted-foreground, rgba(148, 163, 184, 0.85));
+  margin-top: 2px;
+  padding-left: 1px;
+  position: relative;
+  z-index: 1;
+  line-height: 1.4;
+}
+
 /* Animated background overlay for active step */
 .workflow-progress__step-pulse {
   position: absolute;

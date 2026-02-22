@@ -99,6 +99,7 @@ class CriticExecutor(Executor):
             message="Validating generated content quality...",
             current_step=4 if route == "study-plan-generator" else 3,
             total_steps=total_steps,
+            reasoning="Checking relevance to student request, structure, and completeness…",
         )
 
         verdict = await self._validate(
@@ -142,6 +143,18 @@ class CriticExecutor(Executor):
                     verdict.confidence,
                 )
 
+            # Build reasoning for the approved-content path.
+            if auto_approved:
+                critic_reasoning = (
+                    f"Auto-approved after {output.iteration} revision(s) — "
+                    "disclaimer added. Please cross-check with official documentation."
+                )
+            else:
+                critic_reasoning = (
+                    f"Passed quality review — {verdict.confidence}% confidence, "
+                    "all required sections present."
+                )
+
             # Study plan outputs route to PostStudyPlanExecutor
             # for a HITL practice-question offer.
             if output.content_type == "study_plan":
@@ -161,6 +174,7 @@ class CriticExecutor(Executor):
                     current_step=3,
                     total_steps=3,
                     status="completed",
+                    reasoning=critic_reasoning,
                 )
                 await emit_response(
                     ctx,
@@ -168,6 +182,11 @@ class CriticExecutor(Executor):
                     text,
                 )
         else:
+            issue_summary = (
+                "; ".join(verdict.issues[:2])
+                if verdict.issues
+                else "content quality below threshold"
+            )
             await update_workflow_progress(
                 ctx=ctx,
                 route=route,
@@ -175,6 +194,7 @@ class CriticExecutor(Executor):
                 message="Quality review requested revisions...",
                 current_step=4 if route == "study-plan-generator" else 3,
                 total_steps=total_steps,
+                reasoning=f"Revision requested — {issue_summary}.",
             )
             logger.info(
                 "Critic FAIL for %s (iteration %d) — requesting revision",

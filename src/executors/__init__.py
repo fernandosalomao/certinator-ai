@@ -251,6 +251,7 @@ async def update_workflow_progress(
     current_step: int,
     total_steps: int,
     status: str = "in_progress",
+    reasoning: str | None = None,
 ) -> None:
     """Stream the current workflow progress to the CopilotKit frontend.
 
@@ -266,6 +267,9 @@ async def update_workflow_progress(
         current_step (int): 1-based current step index.
         total_steps (int): Total expected steps for the route.
         status (str): Progress status value.
+        reasoning (str | None): Optional human-readable explanation of
+            why the agent made this decision at this step. Rendered as
+            a muted sub-line in the WorkflowProgress UI component.
     """
     safe_total = max(total_steps, 1)
     safe_step = min(max(current_step, 1), safe_total)
@@ -279,6 +283,8 @@ async def update_workflow_progress(
         "status": status,
         "updated_at": datetime.now(timezone.utc).isoformat(),
     }
+    if reasoning:
+        progress["reasoning"] = reasoning
 
     await emit_state_snapshot(
         ctx=ctx,

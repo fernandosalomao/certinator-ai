@@ -107,6 +107,24 @@ class CoordinatorExecutor(Executor):
             "general": "Preparing a direct answer...",
         }
         route = decision.route if decision.route in route_totals else "general"
+
+        # Build a human-readable routing rationale for visible reasoning traces (G8).
+        cert_label = decision.certification or "unspecified exam"
+        task_snippet = (decision.task or "")[:100].rstrip()
+        context_snippet = (decision.context or "")[:80].rstrip()
+        if route == "certification-info":
+            reasoning = f"Routing to certification information — exam: {cert_label}" + (
+                f", task: {task_snippet}" if task_snippet else ""
+            )
+        elif route == "study-plan-generator":
+            reasoning = f"Routing to study plan workflow — exam: {cert_label}" + (
+                f", context: {context_snippet}" if context_snippet else ""
+            )
+        elif route == "practice-questions":
+            reasoning = f"Routing to practice questions — exam: {cert_label}"
+        else:
+            reasoning = "Answering directly — no specialist routing required."
+
         await update_workflow_progress(
             ctx=ctx,
             route=route,
@@ -114,6 +132,7 @@ class CoordinatorExecutor(Executor):
             message=route_messages.get(route, "Routing your request..."),
             current_step=1,
             total_steps=route_totals.get(route, 2),
+            reasoning=reasoning,
         )
 
         await ctx.send_message(decision)

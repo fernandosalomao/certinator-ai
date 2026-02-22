@@ -74,7 +74,12 @@ export default function WorkflowProgress({ progress, currentProgress }: Workflow
       <span className="workflow-progress__step-icon-wrap">
         {isDone ? <CheckIcon /> : <SpinnerIcon />}
       </span>
-      <span className="workflow-progress__step-text">{progress.message}</span>
+      <span className="workflow-progress__step-body">
+        <span className="workflow-progress__step-text">{progress.message}</span>
+        {progress.reasoning && (
+          <span className="workflow-progress__step-reasoning">{progress.reasoning}</span>
+        )}
+      </span>
       {!isDone && <span className="workflow-progress__step-pulse" />}
     </div>
   );

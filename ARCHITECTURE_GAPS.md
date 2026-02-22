@@ -25,7 +25,7 @@ This document identifies gaps between the current implementation and the [requir
 | G5 | [No input validation / prompt injection protection](#g5-no-input-validation--prompt-injection-protection) | Responsible AI | **High** | Medium | ❌ Missing |
 | G6 | [No routing accuracy evaluation dataset](#g6-no-routing-accuracy-evaluation-dataset) | Evaluations & Telemetry | **High** | Medium | ❌ Missing |
 | G7 | [No MCP fallback on unavailability](#g7-no-mcp-fallback-on-unavailability) | Reliability & Safety | **High** | Medium | ✅ Implemented |
-| G8 | [Reasoning traces not visible to user](#g8-reasoning-traces-not-visible-to-user) | Reasoning & Multi-step Thinking | **Medium-High** | Medium | ❌ Missing |
+| G8 | [Reasoning traces not visible to user](#g8-reasoning-traces-not-visible-to-user) | Reasoning & Multi-step Thinking | **Medium-High** | Medium | ✅ Implemented |
 | G9 | [No output content safety filtering](#g9-no-output-content-safety-filtering) | Responsible AI | **Medium** | Medium | ❌ Missing |
 | G10 | [Frontend lacks error handling](#g10-frontend-lacks-error-handling) | User Experience | **Medium** | Low | ❌ Missing |
 | G11 | [No automated evaluation pipeline (CI/CD)](#g11-no-automated-evaluation-pipeline-cicd) | Evaluations & Telemetry | **Medium** | High | ❌ Missing |
@@ -322,7 +322,7 @@ useCopilotChatSuggestions({
 
 | Strength | Gap |
 |----------|-----|
-| ✅ Study plan pipeline is genuinely multi-step (5 executors) | ❌ G8: Multi-step reasoning not visible to user/judges |
+| ✅ Study plan pipeline is genuinely multi-step (5 executors) | ✅ G8: Multi-step reasoning now visible to user via WorkflowProgress |
 | ✅ Cross-route bidirectional flows | ❌ G12: Single-intent routing can't handle compound requests |
 | ✅ Critic revision loop demonstrates reflective reasoning | |
 

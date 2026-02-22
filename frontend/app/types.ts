@@ -57,6 +57,7 @@ export type WorkflowProgress = {
   total_steps: number;
   status: "in_progress" | "completed";
   updated_at: string;
+  reasoning?: string;
 };
 
 // ---------------------------------------------------------------------------
