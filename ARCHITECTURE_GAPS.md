@@ -27,7 +27,7 @@ This document identifies gaps between the current implementation and the [requir
 | G7 | [No MCP fallback on unavailability](#g7-no-mcp-fallback-on-unavailability) | Reliability & Safety | **High** | Medium | ✅ Implemented |
 | G8 | [Reasoning traces not visible to user](#g8-reasoning-traces-not-visible-to-user) | Reasoning & Multi-step Thinking | **Medium-High** | Medium | ✅ Implemented |
 | G9 | [No output content safety filtering](#g9-no-output-content-safety-filtering) | Responsible AI | **Medium** | Medium | ❌ Missing |
-| G10 | [Frontend lacks error handling](#g10-frontend-lacks-error-handling) | User Experience | **Medium** | Low | ❌ Missing |
+| G10 | [Frontend lacks error handling](#g10-frontend-lacks-error-handling) | User Experience | **Medium** | Low | ✅ Implemented |
 | G11 | [No automated evaluation pipeline (CI/CD)](#g11-no-automated-evaluation-pipeline-cicd) | Evaluations & Telemetry | **Medium** | High | ❌ Missing |
 | G12 | [Single-intent routing only](#g12-single-intent-routing-only) | Reasoning & Multi-step Thinking | **Medium** | High | ❌ Missing |
 | G13 | [`useCopilotChatInternal` is private API](#g13-usecoplilotchatinternal-is-private-api) | Reliability | **Medium** | Medium | ⚠️ Workaround |
@@ -339,7 +339,7 @@ useCopilotChatSuggestions({
 
 | Strength | Gap |
 |----------|-----|
-| ✅ CopilotKit + AG-UI gives real-time streaming | ❌ G10: No error handling in frontend |
+| ✅ CopilotKit + AG-UI gives real-time streaming | ✅ G10: Error boundary, banner, slow-run indicator implemented |
 | ✅ QuizCard, OfferCard, QuizDashboard are polished | ❌ G14: Static chat suggestions |
 | ✅ Shared state drives UI outside chat panel | ⚠️ No progress indicators during long MCP calls |
 | ✅ WorkflowProgress shows step-by-step execution | |

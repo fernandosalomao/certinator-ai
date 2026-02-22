@@ -5,6 +5,9 @@ import { CopilotChat, type CopilotKitCSSProperties } from "@copilotkit/react-ui"
 import CertinatorHooks from "./components/CertinatorHooks";
 import CustomAssistantMessage from "./components/CustomAssistantMessage";
 import QuizDashboard from "./components/QuizDashboard";
+import ErrorBoundary from "./components/ErrorBoundary";
+import ErrorBanner from "./components/ErrorBanner";
+import SlowRunIndicator from "./components/SlowRunIndicator";
 import type { CertinatorAgentState } from "./types";
 
 const PROMPT_SUGGESTIONS = [
@@ -16,11 +19,37 @@ const PROMPT_SUGGESTIONS = [
 export default function Page() {
   // Track agent shared state for the sidebar quiz dashboard.
   const [agentState, setAgentState] = useState<CertinatorAgentState>({});
+  // Shown when CopilotChat fires onError (e.g. backend unreachable).
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const handleStateChange = useCallback(
     (state: CertinatorAgentState) => setAgentState(state),
     [],
   );
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const handleCopilotError = useCallback((errorEvent: any) => {
+    const raw: unknown = errorEvent?.error;
+    const rawMsg =
+      raw instanceof Error
+        ? raw.message
+        : typeof raw === "string"
+          ? raw
+          : null;
+
+    // Map low-level network errors to a user-friendly message.
+    const isNetworkError =
+      rawMsg === null ||
+      rawMsg === "" ||
+      /fetch failed|network|failed to fetch|load failed/i.test(rawMsg);
+
+    const msg = isNetworkError
+      ? "Unable to reach the AI service. Make sure the backend is running and try again."
+      : (rawMsg ?? "Something went wrong. Please try again.");
+
+    console.error("[CertinatorAI] CopilotKit error:", raw ?? errorEvent);
+    setErrorMessage(msg);
+  }, []);
 
   const quiz = agentState.active_quiz_state;
 
@@ -42,11 +71,12 @@ export default function Page() {
 
   return (
     <main className="min-h-screen">
-      {/* Register all CopilotKit hooks (HITL, shared state, readables). */}
-      <CertinatorHooks onStateChange={handleStateChange} />
+      <ErrorBoundary>
+        {/* Register all CopilotKit hooks (HITL, shared state, readables). */}
+        <CertinatorHooks onStateChange={handleStateChange} />
 
-      <section className="mx-auto flex w-full max-w-6xl flex-col gap-10 px-6 pb-16 pt-12 md:px-10">
-        <div className="hero-panel rounded-3xl p-8 md:p-10">
+        <section className="mx-auto flex w-full max-w-6xl flex-col gap-10 px-6 pb-16 pt-12 md:px-10">
+          <div className="hero-panel rounded-3xl p-8 md:p-10">
           <div className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/5 px-3 py-1 text-xs tracking-[0.2em] text-white/80 uppercase">
             Reasoning Agent for Microsoft Certifications
           </div>
@@ -96,13 +126,24 @@ export default function Page() {
           <QuizDashboard quiz={quiz} />
         )}
 
+        {/* Inline error banner — shown when CopilotChat fires onError. */}
+        {errorMessage && (
+          <ErrorBanner
+            message={errorMessage}
+            onDismiss={() => setErrorMessage(null)}
+          />
+        )}
+
         <div
           className="surface-card embedded-chat rounded-2xl p-3 md:p-4"
           style={copilotTheme}
         >
+          {/* Slow-run indicator — shown after 30 s of an active run. */}
+          <SlowRunIndicator />
           <CopilotChat
             suggestions={chatSuggestions}
             AssistantMessage={CustomAssistantMessage}
+            onError={handleCopilotError}
             labels={{
               title: "CertinatorAI Copilot",
               initial:
@@ -111,7 +152,9 @@ export default function Page() {
             }}
           />
         </div>
-      </section>
+        </section>
+
+      </ErrorBoundary>
     </main>
   );
 }

@@ -167,6 +167,8 @@ export default function CustomAssistantMessage(props: AssistantMessageProps) {
   // Track whether a response has been submitted to prevent double-sends.
   const submittedRef = useRef(false);
   const [submitted, setSubmitted] = useState(false);
+  // Surfaces sendMessage failures inline so the user can retry.
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
   // Only compute the pending request_info for the current (last) message
   // so the quiz/offer UI appears in the right position — after the text intro.
@@ -198,20 +200,33 @@ export default function CustomAssistantMessage(props: AssistantMessageProps) {
       if (!pendingRequestInfo || submittedRef.current) return;
       submittedRef.current = true;
       setSubmitted(true);
+      setSubmitError(null);
 
       console.log(
         "[CustomAssistantMessage] Submitting HITL response:",
         { toolCallId: pendingRequestInfo.toolCallId, payloadLength: payload.length },
       );
 
-      await sendMessage(
-        {
-          id: crypto.randomUUID?.() ?? String(Date.now()),
-          role: "tool" as const,
-          content: payload,
-          toolCallId: pendingRequestInfo.toolCallId,
-        } as Record<string, unknown>,
-      );
+      try {
+        await sendMessage(
+          {
+            id: crypto.randomUUID?.() ?? String(Date.now()),
+            role: "tool" as const,
+            content: payload,
+            toolCallId: pendingRequestInfo.toolCallId,
+          } as Record<string, unknown>,
+        );
+      } catch (err) {
+        console.error("[CustomAssistantMessage] sendMessage failed:", err);
+        // Reset so the user can retry.
+        submittedRef.current = false;
+        setSubmitted(false);
+        setSubmitError(
+          err instanceof Error
+            ? err.message
+            : "Failed to submit your response. Please try again.",
+        );
+      }
     },
     [sendMessage, pendingRequestInfo],
   );
@@ -283,11 +298,25 @@ export default function CustomAssistantMessage(props: AssistantMessageProps) {
     );
   }
 
+  // Surface sendMessage errors with a retry affordance.
+  const errorUI = submitError ? (
+    <div className="hitl-submit-error" role="alert">
+      <span className="hitl-submit-error__message">{submitError}</span>
+      <button
+        className="hitl-submit-error__retry"
+        onClick={() => setSubmitError(null)}
+      >
+        Dismiss
+      </button>
+    </div>
+  ) : null;
+
   // Render the default AssistantMessage (text, markdown, generativeUI for
   // toolCalls[0]), then append our extra UI for request_info.
   return (
     <>
       <AssistantMessage {...props} />
+      {errorUI}
       {extraUI}
     </>
   );
