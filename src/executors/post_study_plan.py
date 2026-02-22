@@ -61,7 +61,7 @@ class PostStudyPlanHandler(Executor):
     async def handle(
         self,
         approved: ApprovedStudyPlanOutput,
-        ctx: WorkflowContext,
+        ctx: WorkflowContext[RoutingDecision],
     ) -> None:
         """Emit the approved study plan and offer practice.
 
@@ -122,7 +122,7 @@ class PostStudyPlanHandler(Executor):
         self,
         original_request: dict,
         answer: str,
-        ctx: WorkflowContext,
+        ctx: WorkflowContext[RoutingDecision],
     ) -> None:
         """Route to practice quiz or end conversation.
 

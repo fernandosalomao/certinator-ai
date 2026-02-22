@@ -70,7 +70,7 @@ class LearningPathFetcherHandler(Executor):
     async def handle(
         self,
         decision: RoutingDecision,
-        ctx: WorkflowContext,
+        ctx: WorkflowContext[LearningPathsData],
     ) -> None:
         """
         Fetch topics + learning paths and forward to StudyPlanScheduler.
@@ -123,7 +123,7 @@ class LearningPathFetcherHandler(Executor):
     async def handle_quiz_study_plan(
         self,
         request: StudyPlanFromQuizRequest,
-        ctx: WorkflowContext,
+        ctx: WorkflowContext[LearningPathsData],
     ) -> None:
         """Fetch learning paths for a post-quiz study plan.
 

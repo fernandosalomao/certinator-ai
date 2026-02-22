@@ -98,7 +98,7 @@ class PracticeQuizOrchestrator(Executor):
     async def handle(
         self,
         decision: RoutingDecision,
-        ctx: WorkflowContext,
+        ctx: WorkflowContext[StudyPlanFromQuizRequest],
     ) -> None:
         """Start the quiz: fetch topics, generate questions, present.
 
@@ -196,7 +196,7 @@ class PracticeQuizOrchestrator(Executor):
         self,
         original_request: dict,
         answer: str,
-        ctx: WorkflowContext,
+        ctx: WorkflowContext[StudyPlanFromQuizRequest],
     ) -> None:
         """Route HITL responses based on quiz state.
 

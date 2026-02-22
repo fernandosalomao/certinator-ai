@@ -16,7 +16,7 @@ Graph position::
 """
 
 import logging
-from typing import Any
+from typing import Any, Union
 
 from agent_framework import (
     ChatAgent,
@@ -73,7 +73,7 @@ class CriticExecutor(Executor):
     async def handle(
         self,
         output: SpecialistOutput,
-        ctx: WorkflowContext,
+        ctx: WorkflowContext[Union[ApprovedStudyPlanOutput, RevisionRequest]],
     ) -> None:
         """
         Validate content and route accordingly.

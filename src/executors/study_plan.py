@@ -74,7 +74,7 @@ class StudyPlanSchedulerHandler(Executor):
     async def handle(
         self,
         data: LearningPathsData,
-        ctx: WorkflowContext,
+        ctx: WorkflowContext[SpecialistOutput],
     ) -> None:
         """
         Schedule the study plan and forward to the Critic.
@@ -106,7 +106,7 @@ class StudyPlanSchedulerHandler(Executor):
     async def handle_revision(
         self,
         revision: RevisionRequest,
-        ctx: WorkflowContext,
+        ctx: WorkflowContext[SpecialistOutput],
     ) -> None:
         """
         Revise the study plan based on Critic feedback.

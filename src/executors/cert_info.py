@@ -59,7 +59,7 @@ class CertInfoHandler(Executor):
     async def handle(
         self,
         decision: RoutingDecision,
-        ctx: WorkflowContext,
+        ctx: WorkflowContext[SpecialistOutput],
     ) -> None:
         """
         Fetch certification info and forward to the Critic.
@@ -91,7 +91,7 @@ class CertInfoHandler(Executor):
     async def handle_revision(
         self,
         revision: RevisionRequest,
-        ctx: WorkflowContext,
+        ctx: WorkflowContext[SpecialistOutput],
     ) -> None:
         """
         Revise certification info based on Critic feedback.

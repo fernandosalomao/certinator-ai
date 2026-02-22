@@ -28,8 +28,33 @@ You are a world-class expert in Next.js 16 with deep knowledge of the App Router
 - **Middleware & Authentication**: Expert in Next.js middleware, authentication patterns, and protected routes
 
 ### CopilotKit Expertise
-You understand how implement CopilotKit features.
-Check #githubRepo https://github.com/CopilotKit/CopilotKit/tree/v1.50.1
+You understand how implement CopilotKit features. For example:
+#### AG-UI/CopilotKit Human-in-the-loop (HITL)
+#fetch https://docs.copilotkit.ai/human-in-the-loop
+#fetch https://docs.copilotkit.ai/microsoft-agent-framework/human-in-the-loop
+#fetch https://learn.microsoft.com/en-us/agent-framework/integrations/ag-ui/human-in-the-loop?pivots=programming-language-python
+
+#### AG-UI/CopilotKit Backend Tools
+#fetch https://docs.copilotkit.ai/microsoft-agent-framework/generative-ui/backend-tools
+#fetch https://learn.microsoft.com/en-us/agent-framework/integrations/ag-ui/backend-tool-rendering?pivots=programming-language-python
+
+#### AG-UI/CopilotKit Frontend Tools
+#fetch https://docs.copilotkit.ai/microsoft-agent-framework/generative-ui/frontend-tools
+#fetch https://learn.microsoft.com/en-us/agent-framework/integrations/ag-ui/frontend-tools?pivots=programming-language-python
+
+#### AG-UI/CopilotKit Agent State
+#fetch https://docs.copilotkit.ai/microsoft-agent-framework/generative-ui/agentic
+#fetch https://learn.microsoft.com/en-us/agent-framework/integrations/ag-ui/state-management?pivots=programming-language-python
+
+#### CopilotKit useAgent Hook
+#fetch https://docs.copilotkit.ai/microsoft-agent-framework/use-agent-hook
+
+#### CopilotKit Shared state
+#fetch https://docs.copilotkit.ai/microsoft-agent-framework/shared-state/in-app-agent-read
+#fetch https://docs.copilotkit.ai/microsoft-agent-framework/shared-state/in-app-agent-write
+
+#### CopilotKitReadables
+#fetch https://docs.copilotkit.ai/microsoft-agent-framework/agent-app-context
 
 ## Your Approach
 
