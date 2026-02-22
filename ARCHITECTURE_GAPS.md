@@ -20,7 +20,7 @@ This document identifies gaps between the current implementation and the [requir
 |---|-----|-----------------|----------|--------|--------|
 | G1 | [No error boundaries on agent/MCP calls](#g1-no-error-boundaries-on-agentmcp-calls) | Reliability & Safety | **Critical** | Low | ✅ Implemented |
 | G2 | [Critic lacks user-request context](#g2-critic-lacks-user-request-context) | Accuracy & Relevance | **High** | Low | ✅ Implemented |
-| G3 | [Practice questions not validated before delivery](#g3-practice-questions-not-validated-before-delivery) | Accuracy & Relevance | **High** | Low | ❌ Missing |
+| G3 | [Practice questions not validated before delivery](#g3-practice-questions-not-validated-before-delivery) | Accuracy & Relevance | **High** | Low | ✅ Implemented |
 | G4 | [Missing custom OTel metrics for quality signals](#g4-missing-custom-otel-metrics-for-quality-signals) | Evaluations & Telemetry | **High** | Low | ❌ Missing |
 | G5 | [No input validation / prompt injection protection](#g5-no-input-validation--prompt-injection-protection) | Responsible AI | **High** | Medium | ❌ Missing |
 | G6 | [No routing accuracy evaluation dataset](#g6-no-routing-accuracy-evaluation-dataset) | Evaluations & Telemetry | **High** | Medium | ❌ Missing |
@@ -315,7 +315,7 @@ useCopilotChatSuggestions({
 | Strength | Gap |
 |----------|-----|
 | ✅ MCP grounding ensures freshness | ✅ G2: Critic now validates against original user request |
-| ✅ Structured output prevents routing errors | ❌ G3: Practice questions not validated before delivery |
+| ✅ Structured output prevents routing errors | ✅ G3: Practice questions now validated before delivery |
 | ✅ Deterministic scoring eliminates arithmetic errors | ❌ G15: Feedback report scores not cross-checked |
 
 ### Reasoning & Multi-step Thinking

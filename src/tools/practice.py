@@ -90,3 +90,102 @@ def score_quiz(
         "weak_topics": weak_topics,
         "question_results": question_results,
     }
+
+
+def validate_questions(
+    questions: list[dict],
+    expected_topics: list[str],
+    expected_count: int,
+) -> list[str]:
+    """Deterministically validate a list of practice questions.
+
+    Performs structural checks that an LLM cannot be trusted to
+    enforce reliably.  Returns a list of human-readable violation
+    strings so the caller can feed them back to the agent as
+    regeneration feedback.  An empty list means the batch is valid.
+
+    Checks performed:
+        - Question count matches *expected_count*.
+        - Each question exposes exactly the options A, B, C, and D.
+        - All four option values within a question are distinct.
+        - ``correct_answer`` is one of A, B, C, or D.
+        - No two questions share the same ``question_text``.
+        - Every topic in *expected_topics* is covered by at least
+          one question.
+
+    Parameters:
+        questions (list[dict]): Question dicts to validate.  Each
+            must have at least ``options`` (dict), ``correct_answer``
+            (str), ``question_text`` (str), and ``topic`` (str).
+        expected_topics (list[str]): Topic names that must each
+            appear in at least one question.
+        expected_count (int): Expected number of questions.
+
+    Returns:
+        list[str]: Violation messages; empty list if fully valid.
+    """
+    violations: list[str] = []
+    valid_letters = {"A", "B", "C", "D"}
+
+    # --- 1. Count check ---------------------------------------------------
+    if len(questions) != expected_count:
+        violations.append(
+            f"Expected {expected_count} questions but received {len(questions)}."
+        )
+
+    seen_texts: set[str] = set()
+    covered_topics: set[str] = set()
+
+    for idx, q in enumerate(questions):
+        num = q.get("question_number", idx + 1)
+        options: dict = q.get("options", {})
+        correct: str = str(q.get("correct_answer", "")).strip().upper()
+        text: str = q.get("question_text", "").strip()
+        topic: str = q.get("topic", "").strip()
+
+        # --- 2. Options keys must be exactly A, B, C, D -------------------
+        option_keys = {k.strip().upper() for k in options.keys()}
+        if option_keys != valid_letters:
+            missing = valid_letters - option_keys
+            extra = option_keys - valid_letters
+            msg = f"Q{num}: options keys are invalid."
+            if missing:
+                msg += f" Missing: {sorted(missing)}."
+            if extra:
+                msg += f" Unexpected: {sorted(extra)}."
+            violations.append(msg)
+
+        # --- 3. Option values must all be distinct ------------------------
+        option_values = [str(v).strip() for v in options.values()]
+        if len(set(option_values)) < len(option_values):
+            violations.append(f"Q{num}: duplicate option values detected.")
+
+        # --- 4. correct_answer must be A/B/C/D ----------------------------
+        if correct not in valid_letters:
+            violations.append(
+                f"Q{num}: correct_answer '{correct}' is not one of A, B, C, D."
+            )
+
+        # --- 5. No duplicate question_text --------------------------------
+        normalised_text = text.lower()
+        if normalised_text in seen_texts:
+            violations.append(f"Q{num}: duplicate question text detected.")
+        else:
+            seen_texts.add(normalised_text)
+
+        # Track topic coverage.
+        if topic:
+            covered_topics.add(topic)
+
+    # --- 6. Every expected topic must be covered -------------------------
+    for expected_topic in expected_topics:
+        # Case-insensitive partial match to handle minor name variations.
+        matched = any(
+            expected_topic.lower() in covered.lower()
+            or covered.lower() in expected_topic.lower()
+            for covered in covered_topics
+        )
+        if not matched:
+            violations.append(f"No question covers expected topic '{expected_topic}'.")
+
+    return violations

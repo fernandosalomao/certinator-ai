@@ -53,9 +53,12 @@ from executors.models import (
     RoutingDecision,
     StudyPlanFromQuizRequest,
 )
-from tools.practice import score_quiz
+from tools.practice import score_quiz, validate_questions
 
 logger = logging.getLogger(__name__)
+
+# Maximum regeneration attempts when structural validation fails.
+MAX_VALIDATION_RETRIES = 2
 
 # Shared-state key for persisting quiz state across HITL turns.
 QUIZ_STATE_KEY = "active_quiz_state"
@@ -120,9 +123,9 @@ class PracticeQuestionsExecutor(Executor):
         topics = await self._fetch_exam_topics(cert)
         question_count = self._extract_question_count(decision)
 
-        # Generate all questions upfront.
+        # Generate and structurally validate all questions upfront.
         try:
-            questions = await self._generate_questions(
+            questions = await self._validate_and_regenerate(
                 cert,
                 topics,
                 question_count,
@@ -427,6 +430,86 @@ class PracticeQuestionsExecutor(Executor):
             )
 
     # ------------------------------------------------------------------
+    # Internal: validated question generation
+    # ------------------------------------------------------------------
+
+    async def _validate_and_regenerate(
+        self,
+        cert: str,
+        topics: list[dict],
+        count: int,
+        focus_context: str = "",
+    ) -> list[PracticeQuestion]:
+        """Generate questions and retry until they pass structural validation.
+
+        Calls ``_generate_questions()`` then ``validate_questions()``.
+        On violations the feedback is appended to the prompt and
+        generation is retried up to ``MAX_VALIDATION_RETRIES`` times.
+        If the batch still has violations after all retries, the best
+        available result is returned with a warning so students are
+        never hard-blocked.
+
+        Parameters:
+            cert (str): Certification code.
+            topics (list[dict]): Topics with weights.
+            count (int): Number of questions to generate.
+            focus_context (str): Optional focus area.
+
+        Returns:
+            list[PracticeQuestion]: Validated (or best-effort) questions.
+        """
+        expected_topic_names = [t.get("name", "") for t in topics]
+        prior_violations: list[str] = []
+        questions: list[PracticeQuestion] = []
+
+        for attempt in range(1, MAX_VALIDATION_RETRIES + 2):
+            questions = await self._generate_questions(
+                cert,
+                topics,
+                count,
+                focus_context,
+                prior_violations=prior_violations if prior_violations else None,
+            )
+
+            q_dicts = [q.model_dump() for q in questions]
+            violations = validate_questions(
+                q_dicts,
+                expected_topic_names,
+                count,
+            )
+
+            if not violations:
+                if attempt > 1:
+                    logger.info(
+                        "PracticeQuestions: validation passed on attempt %d for %s.",
+                        attempt,
+                        cert,
+                    )
+                return questions
+
+            logger.warning(
+                "PracticeQuestions: validation attempt %d/%d failed for %s: %s",
+                attempt,
+                MAX_VALIDATION_RETRIES + 1,
+                cert,
+                violations,
+            )
+
+            if attempt <= MAX_VALIDATION_RETRIES:
+                prior_violations = violations
+            else:
+                # Cap reached — proceed with best-available questions.
+                logger.warning(
+                    "PracticeQuestions: delivering questions with %d "
+                    "unresolved violation(s) after %d attempts for %s.",
+                    len(violations),
+                    MAX_VALIDATION_RETRIES + 1,
+                    cert,
+                )
+
+        return questions
+
+    # ------------------------------------------------------------------
     # Internal: question generation
     # ------------------------------------------------------------------
 
@@ -436,6 +519,7 @@ class PracticeQuestionsExecutor(Executor):
         topics: list[dict],
         count: int,
         focus_context: str = "",
+        prior_violations: list[str] | None = None,
     ) -> list[PracticeQuestion]:
         """Generate practice questions via the practice agent.
 
@@ -444,6 +528,9 @@ class PracticeQuestionsExecutor(Executor):
             topics (list[dict]): Topics with weights.
             count (int): Number of questions to generate.
             focus_context (str): Optional focus area.
+            prior_violations (list[str] | None): Structural violations
+                from a previous attempt, appended to the prompt so the
+                agent can self-correct.
 
         Returns:
             list[PracticeQuestion]: Parsed questions or empty.
@@ -465,6 +552,11 @@ class PracticeQuestionsExecutor(Executor):
         )
         if focus_context:
             prompt += f"- Focus area: {focus_context}\n"
+        if prior_violations:
+            violation_list = "\n".join(f"  - {v}" for v in prior_violations)
+            prompt += (
+                f"\nFix these issues from the previous attempt:\n{violation_list}\n"
+            )
 
         response = await safe_agent_run(
             self.practice_agent,
