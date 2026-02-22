@@ -52,6 +52,8 @@ genuinely broken content; do not FAIL for style preferences.
   `https://learn.microsoft.com`.
 - [ ] Content does not contradict known Microsoft exam facts \
   (e.g. wrong product names, non-existent exam codes).
+- [ ] Content addresses the specific certification/exam code stated in the \
+  student request — not a different or adjacent exam.
 
 ### Recommended (failure → suggestion only)
 - Domain percentage weights are present.
@@ -73,6 +75,8 @@ genuinely broken content; do not FAIL for style preferences.
   (e.g. > 20 hours/week without the student requesting it).
 - [ ] Scheduler notes (⚠️ / ✅) from the input are reproduced, \
   not silently omitted.
+- [ ] Study schedule is consistent with the student's stated availability \
+  (e.g. weekly hours) when provided in the student context.
 
 ### Recommended (failure → suggestion only)
 - Weak topics from a prior quiz are called out in a highlighted callout.

@@ -100,7 +100,12 @@ class CriticExecutor(Executor):
             total_steps=total_steps,
         )
 
-        verdict = await self._validate(output.content, output.content_type)
+        verdict = await self._validate(
+            output.content,
+            output.content_type,
+            task=output.original_decision.task,
+            context=output.original_decision.context,
+        )
 
         if verdict.verdict == "PASS" or output.iteration >= MAX_CRITIC_ITERATIONS:
             text = output.content
@@ -181,6 +186,9 @@ class CriticExecutor(Executor):
         self,
         content: str,
         content_type: str,
+        *,
+        task: str = "",
+        context: str = "",
     ) -> CriticVerdict:
         """
         Send *content* through the Critic agent and return a verdict.
@@ -189,13 +197,24 @@ class CriticExecutor(Executor):
             content (str): The text to validate.
             content_type (str): Label such as "certification_info"
                 or "study_plan".
+            task (str): Task description from the original routing decision.
+            context (str): User context from the original routing decision.
 
         Returns:
             CriticVerdict: Structured validation result.
         """
+        context_block = ""
+        if task:
+            context_block += f"Student request: {task}\n"
+        if context:
+            context_block += f"Student context: {context}\n"
+        if context_block:
+            context_block += "\n"
+
         prompt = (
-            f"Review the following {content_type} output and "
-            f"validate it.\n\n"
+            f"{context_block}"
+            f"Review the following {content_type} output and validate it "
+            f"against the student's request above.\n\n"
             f"Content to review:\n---\n{content}\n---\n\n"
             "Return validation matching the configured structured schema."
         )

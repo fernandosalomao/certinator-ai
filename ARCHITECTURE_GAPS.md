@@ -19,7 +19,7 @@ This document identifies gaps between the current implementation and the [requir
 | # | Gap | Requirement Area | Severity | Effort | Status |
 |---|-----|-----------------|----------|--------|--------|
 | G1 | [No error boundaries on agent/MCP calls](#g1-no-error-boundaries-on-agentmcp-calls) | Reliability & Safety | **Critical** | Low | ✅ Implemented |
-| G2 | [Critic lacks user-request context](#g2-critic-lacks-user-request-context) | Accuracy & Relevance | **High** | Low | ❌ Missing |
+| G2 | [Critic lacks user-request context](#g2-critic-lacks-user-request-context) | Accuracy & Relevance | **High** | Low | ✅ Implemented |
 | G3 | [Practice questions not validated before delivery](#g3-practice-questions-not-validated-before-delivery) | Accuracy & Relevance | **High** | Low | ❌ Missing |
 | G4 | [Missing custom OTel metrics for quality signals](#g4-missing-custom-otel-metrics-for-quality-signals) | Evaluations & Telemetry | **High** | Low | ❌ Missing |
 | G5 | [No input validation / prompt injection protection](#g5-no-input-validation--prompt-injection-protection) | Responsible AI | **High** | Medium | ❌ Missing |
@@ -314,7 +314,7 @@ useCopilotChatSuggestions({
 
 | Strength | Gap |
 |----------|-----|
-| ✅ MCP grounding ensures freshness | ❌ G2: Critic doesn't validate against original user request |
+| ✅ MCP grounding ensures freshness | ✅ G2: Critic now validates against original user request |
 | ✅ Structured output prevents routing errors | ❌ G3: Practice questions not validated before delivery |
 | ✅ Deterministic scoring eliminates arithmetic errors | ❌ G15: Feedback report scores not cross-checked |
 
