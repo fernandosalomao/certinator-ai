@@ -40,7 +40,7 @@ from agent_framework import (
 )
 
 from config import DEFAULT_PRACTICE_QUESTIONS
-from executors import emit_response, extract_response_text
+from executors import emit_response, emit_state_snapshot, extract_response_text
 from executors.models import (
     LearningPathFetcherResponse,
     PracticeQuestion,
@@ -145,6 +145,13 @@ class PracticeQuizOrchestrator(Executor):
         await ctx.shared_state.set(
             QUIZ_STATE_KEY,
             quiz_state.model_dump(),
+        )
+        await emit_state_snapshot(
+            ctx=ctx,
+            executor_id=self.id,
+            tool_name="update_active_quiz_state",
+            tool_argument="quiz_state",
+            state_value=quiz_state.model_dump(),
         )
 
         # Emit intro message.
@@ -264,6 +271,13 @@ class PracticeQuizOrchestrator(Executor):
         await ctx.shared_state.set(
             QUIZ_STATE_KEY,
             state.model_dump(),
+        )
+        await emit_state_snapshot(
+            ctx=ctx,
+            executor_id=self.id,
+            tool_name="update_active_quiz_state",
+            tool_argument="quiz_state",
+            state_value=state.model_dump(),
         )
         await self._score_and_report(state, ctx)
 

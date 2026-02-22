@@ -435,6 +435,42 @@ a.copilotKitMarkdownElement:hover,
 }
 
 /* ===================================================================
+   Processing Indicator  (shown between quiz submit and feedback)
+   =================================================================== */
+
+.quiz-processing-indicator {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  border: 1px solid rgba(126, 156, 255, 0.18);
+  background: rgba(10, 17, 36, 0.92);
+  border-radius: 1rem;
+  padding: 1rem 1.25rem;
+  margin: 0.5rem 0;
+}
+
+.quiz-processing-indicator__spinner {
+  flex-shrink: 0;
+  width: 1.25rem;
+  height: 1.25rem;
+  border: 2px solid rgba(126, 156, 255, 0.2);
+  border-top-color: rgba(126, 156, 255, 0.8);
+  border-radius: 50%;
+  animation: quiz-spin 0.8s linear infinite;
+}
+
+@keyframes quiz-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.quiz-processing-indicator__text {
+  font-size: 0.875rem;
+  color: rgba(200, 215, 255, 0.7);
+}
+
+/* ===================================================================
    Offer Card  (rendered by useHumanInTheLoop study_plan / practice)
    =================================================================== */
 
@@ -594,3 +630,188 @@ a.copilotKitMarkdownElement:hover,
   color: #b8c6f0;
   margin: 0;
 }
+
+/* ===================================================================
+   Workflow Progress (in-chat state updates)
+   =================================================================== */
+
+.workflow-progress {
+  position: relative;
+  border: 1px solid rgba(126, 156, 255, 0.22);
+  background: linear-gradient(135deg, #0d1526 0%, #111827 50%, #0d1526 100%);
+  border-radius: 0.9rem;
+  padding: 1.1rem 1rem;
+  margin: 0.45rem 0;
+  overflow: hidden;
+}
+
+/* Decorative blobs */
+.workflow-progress::before {
+  content: "";
+  position: absolute;
+  top: -1rem;
+  right: -1rem;
+  width: 5rem;
+  height: 5rem;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(59, 130, 246, 0.12), transparent 70%);
+  pointer-events: none;
+}
+.workflow-progress::after {
+  content: "";
+  position: absolute;
+  bottom: -1rem;
+  left: -1rem;
+  width: 4rem;
+  height: 4rem;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(16, 185, 129, 0.1), transparent 70%);
+  pointer-events: none;
+}
+
+.workflow-progress__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+}
+
+.workflow-progress__title {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 700;
+  background: linear-gradient(90deg, #3b82f6, #8b5cf6);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.workflow-progress__ratio {
+  font-size: 0.78rem;
+  color: #6b7db3;
+}
+
+.workflow-progress__bar-track {
+  position: relative;
+  width: 100%;
+  height: 0.42rem;
+  border-radius: 999px;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.1);
+  margin-bottom: 0.7rem;
+}
+
+.workflow-progress__bar-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #3b82f6, #8b5cf6);
+  transition: width 0.4s ease;
+}
+
+.workflow-progress__message {
+  margin: 0 0 0.65rem;
+  font-size: 0.82rem;
+  color: #94a3c9;
+}
+
+.workflow-progress__steps {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.32rem;
+}
+
+/* Each row */
+.workflow-progress__step {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 0.6rem;
+  padding: 0.45rem 0.6rem;
+  transition: background 0.3s, border-color 0.3s;
+  overflow: hidden;
+}
+
+/* Icon circle wrapper */
+.workflow-progress__step-icon-wrap {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.5rem;
+  height: 1.5rem;
+  border-radius: 50%;
+  z-index: 1;
+}
+
+/* Pending dot */
+.workflow-progress__step-dot {
+  width: 0.45rem;
+  height: 0.45rem;
+  border-radius: 50%;
+  background: #475569;
+}
+
+.workflow-progress__step-text {
+  font-size: 0.82rem;
+  font-weight: 500;
+  position: relative;
+  z-index: 1;
+}
+
+/* Animated background overlay for active step */
+.workflow-progress__step-pulse {
+  position: absolute;
+  inset: 0;
+  border-radius: 0.6rem;
+  background: linear-gradient(90deg, rgba(59, 130, 246, 0.08), rgba(139, 92, 246, 0.08));
+  animation: progressPulse 2s ease-in-out infinite;
+}
+
+@keyframes progressPulse {
+  0%, 100% { opacity: 0.6; }
+  50% { opacity: 1; }
+}
+
+/* Done */
+.workflow-progress__step--done {
+  color: #6ee7b7;
+  background: rgba(16, 185, 129, 0.1);
+  border-color: rgba(16, 185, 129, 0.3);
+}
+.workflow-progress__step--done .workflow-progress__step-icon-wrap {
+  background: linear-gradient(135deg, #10b981, #059669);
+  box-shadow: 0 0 8px rgba(16, 185, 129, 0.35);
+}
+
+/* Active */
+.workflow-progress__step--active {
+  color: #c7d8ff;
+  background: rgba(59, 130, 246, 0.1);
+  border-color: rgba(99, 102, 241, 0.45);
+  box-shadow: 0 2px 12px rgba(59, 130, 246, 0.15);
+}
+.workflow-progress__step--active .workflow-progress__step-icon-wrap {
+  background: linear-gradient(135deg, #3b82f6, #7c3aed);
+  box-shadow: 0 0 8px rgba(99, 102, 241, 0.4);
+}
+.workflow-progress__step--active .workflow-progress__step-text {
+  color: #dce6ff;
+  font-size: 0.86rem;
+}
+
+/* Pending */
+.workflow-progress__step--pending {
+  color: #4b5a7d;
+  background: rgba(255, 255, 255, 0.02);
+}
+.workflow-progress__step--pending .workflow-progress__step-icon-wrap {
+  background: #1e2d45;
+  border: 1px solid #2d3f5c;
+}
+

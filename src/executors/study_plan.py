@@ -29,7 +29,7 @@ from agent_framework import (
     handler,
 )
 
-from executors import extract_response_text
+from executors import extract_response_text, update_workflow_progress
 from executors.models import LearningPathsData, RevisionRequest, SpecialistOutput
 from tools.schedule import schedule_study_plan
 
@@ -83,6 +83,14 @@ class StudyPlanSchedulerHandler(Executor):
             data (LearningPathsData): Topics + original routing decision.
             ctx (WorkflowContext): Workflow context for messaging.
         """
+        await update_workflow_progress(
+            ctx=ctx,
+            route="study_plan",
+            active_executor=self.id,
+            message="Building a week-by-week study schedule...",
+            current_step=3,
+            total_steps=5,
+        )
         plan_text = await self._generate_plan(data)
         await ctx.send_message(
             SpecialistOutput(
@@ -107,6 +115,14 @@ class StudyPlanSchedulerHandler(Executor):
             revision (RevisionRequest): Revision request with feedback.
             ctx (WorkflowContext): Workflow context for messaging.
         """
+        await update_workflow_progress(
+            ctx=ctx,
+            route="study_plan",
+            active_executor=self.id,
+            message="Refining the study schedule based on quality review...",
+            current_step=3,
+            total_steps=5,
+        )
         cert = revision.original_decision.certification or "the requested certification"
         feedback_text = "\n".join(f"- {f}" for f in revision.feedback)
         prompt = (

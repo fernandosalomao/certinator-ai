@@ -3,6 +3,7 @@
 import { useState, useCallback } from "react";
 import { CopilotChat, type CopilotKitCSSProperties } from "@copilotkit/react-ui";
 import CertinatorHooks from "./components/CertinatorHooks";
+import CustomAssistantMessage from "./components/CustomAssistantMessage";
 import QuizDashboard from "./components/QuizDashboard";
 import type { CertinatorAgentState } from "./types";
 
@@ -88,8 +89,10 @@ export default function Page() {
           </div>
         </div>
 
-        {/* Quiz dashboard — visible outside the chat while a quiz is active */}
-        {quiz && quiz.status === "in_progress" && (
+        {/* Quiz dashboard — visible outside the chat once a quiz is completed.
+            During in_progress, the QuizSession component inside the chat
+            already shows its own live progress bar + question navigator. */}
+        {quiz && quiz.status === "completed" && (
           <QuizDashboard quiz={quiz} />
         )}
 
@@ -99,6 +102,7 @@ export default function Page() {
         >
           <CopilotChat
             suggestions={chatSuggestions}
+            AssistantMessage={CustomAssistantMessage}
             labels={{
               title: "CertinatorAI Copilot",
               initial:

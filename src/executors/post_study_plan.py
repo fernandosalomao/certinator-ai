@@ -22,7 +22,7 @@ from agent_framework import (
     response_handler,
 )
 
-from executors import emit_response
+from executors import emit_response, emit_state_snapshot, update_workflow_progress
 from executors.models import (
     ApprovedStudyPlanOutput,
     RoutingDecision,
@@ -70,16 +70,32 @@ class PostStudyPlanHandler(Executor):
                 study plan.
             ctx (WorkflowContext): Workflow context.
         """
+        await update_workflow_progress(
+            ctx=ctx,
+            route="study_plan",
+            active_executor=self.id,
+            message="Study plan is ready.",
+            current_step=5,
+            total_steps=5,
+            status="completed",
+        )
+
         # Stream the approved study plan text to the user.
         await emit_response(ctx, self.id, approved.content)
 
-        # Persist context for the response handler.
-        await ctx.shared_state.set(
-            POST_STUDY_PLAN_CTX_KEY,
-            {
-                "certification": approved.certification,
-                "context": approved.original_decision.context,
-            },
+        context_data = {
+            "certification": approved.certification,
+            "context": approved.original_decision.context,
+        }
+        # Persist for HITL response handler internal reads.
+        await ctx.shared_state.set(POST_STUDY_PLAN_CTX_KEY, context_data)
+        # Emit to frontend AG-UI state via synthetic tool call pair.
+        await emit_state_snapshot(
+            ctx=ctx,
+            executor_id=self.id,
+            tool_name="update_post_study_plan_context",
+            tool_argument="context",
+            state_value=context_data,
         )
 
         # Offer practice questions via HITL.

@@ -40,11 +40,23 @@ export type QuizState = {
 export type CertinatorAgentState = {
   /** Active quiz session (set by PracticeQuizOrchestrator). */
   active_quiz_state?: QuizState;
+  /** Current multi-step workflow progress for in-chat rendering. */
+  workflow_progress?: WorkflowProgress;
   /** Post-study-plan context (set by PostStudyPlanHandler). */
   post_study_plan_context?: {
     certification: string;
     context: string;
   };
+};
+
+export type WorkflowProgress = {
+  route: "study_plan" | "cert_info" | "practice" | "general";
+  active_executor: string;
+  message: string;
+  current_step: number;
+  total_steps: number;
+  status: "in_progress" | "completed";
+  updated_at: string;
 };
 
 // ---------------------------------------------------------------------------

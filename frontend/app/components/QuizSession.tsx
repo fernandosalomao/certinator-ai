@@ -31,12 +31,19 @@ type QuizSessionProps = {
   questions: SessionQuestion[];
   /** Send the full answer payload back to the backend. */
   respond: (payload: string) => void;
+  /**
+   * Whether the backend respond callback is wired up and ready.
+   * The submit button is disabled until this is true, but the quiz
+   * UI renders immediately so the student can start reading/answering.
+   */
+  canSubmit?: boolean;
 };
 
 export default function QuizSession({
   certification,
   questions,
   respond,
+  canSubmit = true,
 }: QuizSessionProps) {
   const total = questions.length;
 
@@ -158,15 +165,17 @@ export default function QuizSession({
         ) : (
           <button
             type="button"
-            disabled={!allAnswered || submitted}
+            disabled={!allAnswered || submitted || !canSubmit}
             onClick={handleSubmit}
             className="quiz-session__btn quiz-session__btn--submit"
           >
             {submitted
               ? "Submitting…"
-              : allAnswered
-                ? "Submit Quiz"
-                : `${total - answeredCount} unanswered`}
+              : !canSubmit
+                ? "Connecting…"
+                : allAnswered
+                  ? "Submit Quiz"
+                  : `${total - answeredCount} unanswered`}
           </button>
         )}
       </div>

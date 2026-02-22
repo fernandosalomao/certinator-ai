@@ -21,6 +21,8 @@ type OfferCardProps = {
   noLabel?: string;
   /** Called with the user's decision text. */
   onRespond: (response: string) => void;
+  /** Disable buttons while the backend respond callback isn't ready yet. */
+  disabled?: boolean;
 };
 
 export default function OfferCard({
@@ -29,11 +31,12 @@ export default function OfferCard({
   yesLabel = "Yes, please!",
   noLabel = "No thanks",
   onRespond,
+  disabled = false,
 }: OfferCardProps) {
   const [answered, setAnswered] = useState<"yes" | "no" | null>(null);
 
   const handleClick = (choice: "yes" | "no") => {
-    if (answered) return;
+    if (answered || disabled) return;
     setAnswered(choice);
     onRespond(choice);
   };
@@ -51,6 +54,7 @@ export default function OfferCard({
             type="button"
             className="offer-btn offer-btn--yes"
             onClick={() => handleClick("yes")}
+            disabled={disabled}
           >
             {yesLabel}
           </button>
@@ -58,6 +62,7 @@ export default function OfferCard({
             type="button"
             className="offer-btn offer-btn--no"
             onClick={() => handleClick("no")}
+            disabled={disabled}
           >
             {noLabel}
           </button>

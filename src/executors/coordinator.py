@@ -17,7 +17,7 @@ from agent_framework import (
     handler,
 )
 
-from executors import extract_response_text
+from executors import extract_response_text, update_workflow_progress
 from executors.models import CoordinatorResponse, RoutingDecision
 
 logger = logging.getLogger(__name__)
@@ -79,6 +79,29 @@ class CoordinatorRouter(Executor):
             decision.route,
             decision.certification or "n/a",
         )
+
+        route_totals = {
+            "cert_info": 3,
+            "study_plan": 5,
+            "practice": 3,
+            "general": 2,
+        }
+        route_messages = {
+            "cert_info": "Routing to certification information specialist...",
+            "study_plan": "Routing to study plan workflow...",
+            "practice": "Routing to practice workflow...",
+            "general": "Preparing a direct answer...",
+        }
+        route = decision.route if decision.route in route_totals else "general"
+        await update_workflow_progress(
+            ctx=ctx,
+            route=route,
+            active_executor=self.id,
+            message=route_messages.get(route, "Routing your request..."),
+            current_step=1,
+            total_steps=route_totals.get(route, 2),
+        )
+
         await ctx.send_message(decision)
 
     # ------------------------------------------------------------------

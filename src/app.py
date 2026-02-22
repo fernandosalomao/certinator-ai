@@ -45,6 +45,43 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+
+def _build_predict_state_config() -> dict[str, dict[str, str]]:
+    """Return AG-UI predict_state_config mapping synthetic tool calls to state keys."""
+    return {
+        "workflow_progress": {
+            "tool": "update_workflow_progress",
+            "tool_argument": "progress",
+        },
+        "active_quiz_state": {
+            "tool": "update_active_quiz_state",
+            "tool_argument": "quiz_state",
+        },
+        "post_study_plan_context": {
+            "tool": "update_post_study_plan_context",
+            "tool_argument": "context",
+        },
+    }
+
+
+def _build_state_schema() -> dict[str, dict[str, str]]:
+    """Return AG-UI state schema used by frontend shared-state hooks."""
+    return {
+        "active_quiz_state": {
+            "type": "object",
+            "description": "Current quiz session state",
+        },
+        "post_study_plan_context": {
+            "type": "object",
+            "description": "Post-study-plan context for HITL practice offer",
+        },
+        "workflow_progress": {
+            "type": "object",
+            "description": "Current multi-step workflow execution progress",
+        },
+    }
+
+
 # Load environment variables (override=True for deployed environments)
 load_dotenv(override=True)
 
@@ -462,6 +499,9 @@ async def run_agui() -> None:
         description=(
             "Multi-agent system for Microsoft certification exam preparation."
         ),
+        state_schema=_build_state_schema(),
+        predict_state_config=_build_predict_state_config(),
+        require_confirmation=False,
         orchestrators=[
             RequestInfoOrchestrator(),
             HumanInTheLoopOrchestrator(),
@@ -538,13 +578,24 @@ async def run_server():
 
     agent, credential = await build_workflow()
 
+    ag_agent = AgentFrameworkAgent(
+        agent=agent,
+        name="Certinator AI",
+        description=(
+            "Multi-agent system for Microsoft certification exam preparation."
+        ),
+        state_schema=_build_state_schema(),
+        predict_state_config=_build_predict_state_config(),
+        require_confirmation=False,
+    )
+
     # Wrap in the HITL message filter so that
     # ``_extract_function_responses()`` does not raise when
     # CopilotKit replays the full conversation history.
     # agent = _RequestInfoMessageFilter(agent)
 
     try:
-        await from_agent_framework(agent).run_async()
+        await from_agent_framework(ag_agent).run_async()
     finally:
         await credential.close()
 

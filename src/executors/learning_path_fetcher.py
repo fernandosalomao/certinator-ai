@@ -25,6 +25,7 @@ from agent_framework import (
     handler,
 )
 
+from executors import update_workflow_progress
 from executors.models import (
     LearningPathFetcherResponse,
     LearningPathsData,
@@ -79,6 +80,14 @@ class LearningPathFetcherHandler(Executor):
             ctx (WorkflowContext): Workflow context for messaging.
         """
         cert = decision.certification or "the requested certification"
+        await update_workflow_progress(
+            ctx=ctx,
+            route="study_plan",
+            active_executor=self.id,
+            message="Fetching official Microsoft Learn topics and paths...",
+            current_step=2,
+            total_steps=5,
+        )
         logger.info("LearningPathFetcher: fetching paths for %s", cert)
 
         prompt = (
@@ -127,6 +136,14 @@ class LearningPathFetcherHandler(Executor):
             ctx (WorkflowContext): Workflow context.
         """
         cert = request.certification
+        await update_workflow_progress(
+            ctx=ctx,
+            route="study_plan",
+            active_executor=self.id,
+            message="Fetching focused learning paths for weak quiz topics...",
+            current_step=2,
+            total_steps=5,
+        )
         logger.info(
             "LearningPathFetcher: fetching paths for "
             "post-quiz study plan (%s, weak: %s)",

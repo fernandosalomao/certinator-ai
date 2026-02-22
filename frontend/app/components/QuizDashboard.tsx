@@ -15,8 +15,13 @@ type QuizDashboardProps = {
 };
 
 export default function QuizDashboard({ quiz }: QuizDashboardProps) {
-  const { certification, questions, current_index, answers, status, topics } =
-    quiz;
+  const certification = quiz?.certification ?? "Certification";
+  const questions = Array.isArray(quiz?.questions) ? quiz.questions : [];
+  const current_index =
+    typeof quiz?.current_index === "number" ? quiz.current_index : 0;
+  const answers = Array.isArray(quiz?.answers) ? quiz.answers : [];
+  const status = quiz?.status ?? "in_progress";
+  const topics = Array.isArray(quiz?.topics) ? quiz.topics : [];
 
   const total = questions.length;
   const answered = answers.length;

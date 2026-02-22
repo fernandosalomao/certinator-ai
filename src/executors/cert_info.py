@@ -23,7 +23,7 @@ from agent_framework import (
     handler,
 )
 
-from executors import extract_response_text
+from executors import extract_response_text, update_workflow_progress
 from executors.models import RevisionRequest, RoutingDecision, SpecialistOutput
 
 logger = logging.getLogger(__name__)
@@ -68,6 +68,14 @@ class CertInfoHandler(Executor):
             decision (RoutingDecision): Routing decision from Coordinator.
             ctx (WorkflowContext): Workflow context for messaging.
         """
+        await update_workflow_progress(
+            ctx=ctx,
+            route="cert_info",
+            active_executor=self.id,
+            message="Retrieving certification details from Microsoft Learn...",
+            current_step=2,
+            total_steps=3,
+        )
         result_text = await self._fetch_cert_info(decision)
         await ctx.send_message(
             SpecialistOutput(
@@ -92,6 +100,14 @@ class CertInfoHandler(Executor):
             revision (RevisionRequest): Revision request with feedback.
             ctx (WorkflowContext): Workflow context for messaging.
         """
+        await update_workflow_progress(
+            ctx=ctx,
+            route="cert_info",
+            active_executor=self.id,
+            message="Refining certification details based on quality review...",
+            current_step=2,
+            total_steps=3,
+        )
         cert = revision.original_decision.certification or "the requested certification"
         feedback_text = "\n".join(f"- {f}" for f in revision.feedback)
         prompt = (

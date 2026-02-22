@@ -27,7 +27,7 @@ from agent_framework import (
     handler,
 )
 
-from executors import emit_response
+from executors import emit_response, update_workflow_progress
 from executors.models import (
     ApprovedStudyPlanOutput,
     CriticVerdict,
@@ -85,6 +85,17 @@ class CriticExecutor(Executor):
             output (SpecialistOutput): Content from a specialist.
             ctx (WorkflowContext): Workflow context for messaging.
         """
+        route = "study_plan" if output.content_type == "study_plan" else "cert_info"
+        total_steps = 5 if route == "study_plan" else 3
+        await update_workflow_progress(
+            ctx=ctx,
+            route=route,
+            active_executor=self.id,
+            message="Validating generated content quality...",
+            current_step=4 if route == "study_plan" else 3,
+            total_steps=total_steps,
+        )
+
         verdict = await self._validate(output.content, output.content_type)
 
         if verdict.verdict == "PASS" or output.iteration >= MAX_CRITIC_ITERATIONS:
@@ -120,12 +131,29 @@ class CriticExecutor(Executor):
                     )
                 )
             else:
+                await update_workflow_progress(
+                    ctx=ctx,
+                    route="cert_info",
+                    active_executor=self.id,
+                    message="Certification information is ready.",
+                    current_step=3,
+                    total_steps=3,
+                    status="completed",
+                )
                 await emit_response(
                     ctx,
                     output.source_executor_id,
                     text,
                 )
         else:
+            await update_workflow_progress(
+                ctx=ctx,
+                route=route,
+                active_executor=self.id,
+                message="Quality review requested revisions...",
+                current_step=4 if route == "study_plan" else 3,
+                total_steps=total_steps,
+            )
             logger.info(
                 "Critic FAIL for %s (iteration %d) — requesting revision",
                 output.source_executor_id,
