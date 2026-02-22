@@ -1,4 +1,4 @@
-"""Critic agent configuration and factory."""
+"""CriticAgent configuration and factory."""
 
 from __future__ import annotations
 
@@ -51,6 +51,6 @@ def create_critic_agent(
         credential=credential,
     )
     return client.create_agent(
-        name="critic-agent",
+        name="CriticAgent",
         instructions=INSTRUCTIONS,
     )

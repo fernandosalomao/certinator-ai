@@ -1,8 +1,8 @@
 """
-Certinator AI — Coordinator Router Executor
+Certinator AI — Coordinator Executor
 
 Entry-point node of the workflow graph. Receives user messages,
-calls the Coordinator LLM to produce a structured routing decision,
+calls the CoordinatorAgent to produce a structured routing decision,
 and forwards the decision downstream via switch-case edges.
 """
 
@@ -26,7 +26,7 @@ logger = logging.getLogger(__name__)
 MESSAGES_KEY = "conversation_messages"
 
 
-class CoordinatorRouter(Executor):
+class CoordinatorExecutor(Executor):
     """
     Analyse user intent and emit a RoutingDecision.
 
@@ -36,9 +36,9 @@ class CoordinatorRouter(Executor):
 
     agent: ChatAgent
 
-    def __init__(self, agent: ChatAgent, id: str = "coordinator-router"):
+    def __init__(self, agent: ChatAgent, id: str = "coordinator-executor"):
         """
-        Initialise the Coordinator router.
+        Initialise the Coordinator executor.
 
         Parameters:
             agent (ChatAgent): Coordinator chat agent (gpt-4.1-mini).
@@ -81,15 +81,15 @@ class CoordinatorRouter(Executor):
         )
 
         route_totals = {
-            "cert_info": 3,
-            "study_plan": 5,
-            "practice": 3,
+            "certification-info": 3,
+            "study-plan-generator": 5,
+            "practice-questions": 3,
             "general": 2,
         }
         route_messages = {
-            "cert_info": "Routing to certification information specialist...",
-            "study_plan": "Routing to study plan workflow...",
-            "practice": "Routing to practice workflow...",
+            "certification-info": "Routing to certification information specialist...",
+            "study-plan-generator": "Routing to study plan workflow...",
+            "practice-questions": "Routing to practice workflow...",
             "general": "Preparing a direct answer...",
         }
         route = decision.route if decision.route in route_totals else "general"

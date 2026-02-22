@@ -1,4 +1,4 @@
-"""Study plan agent configuration and factory."""
+"""StudyPlanGeneratorAgent configuration and factory."""
 
 from __future__ import annotations
 
@@ -61,7 +61,7 @@ def create_study_plan_agent(
         credential=credential,
     )
     return client.create_agent(
-        name="study-plan-agent",
+        name="StudyPlanGeneratorAgent",
         instructions=INSTRUCTIONS,
         tools=[schedule_study_plan_tool],
     )

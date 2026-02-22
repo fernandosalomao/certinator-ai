@@ -1,5 +1,5 @@
 """
-Certinator AI — Practice Quiz Orchestrator
+Certinator AI — Practice Questions Executor
 
 HITL-driven executor that sends all practice questions to the UI
 in a single ``request_info`` call, collects the full set of answers
@@ -15,7 +15,7 @@ only **two** HITL round-trips:
 
 Graph position::
 
-    CoordinatorRouter ──► PracticeQuizOrchestrator (HITL)
+    CoordinatorExecutor ──► PracticeQuestionsExecutor (HITL)
                               ├── PASS  → congratulations (terminal)
                               └── FAIL  → HITL study plan offer
                                     ├── YES → StudyPlanFromQuizRequest
@@ -56,7 +56,7 @@ logger = logging.getLogger(__name__)
 QUIZ_STATE_KEY = "active_quiz_state"
 
 
-class PracticeQuizOrchestrator(Executor):
+class PracticeQuestionsExecutor(Executor):
     """Orchestrate an interactive practice quiz with HITL flow.
 
     Responsibilities:
@@ -76,9 +76,9 @@ class PracticeQuizOrchestrator(Executor):
         self,
         practice_agent: ChatAgent,
         learning_path_agent: ChatAgent,
-        id: str = "practice-handler",
+        id: str = "practice-questions-executor",
     ):
-        """Initialise the practice quiz orchestrator.
+        """Initialise the practice questions executor.
 
         Parameters:
             practice_agent (ChatAgent): Agent for question generation
@@ -381,7 +381,7 @@ class PracticeQuizOrchestrator(Executor):
                         0,
                     ),
                     original_decision=RoutingDecision(
-                        route="study_plan",
+                        route="study-plan-generator",
                         task=(
                             "Create a focused study plan for "
                             f"{state.certification} targeting "

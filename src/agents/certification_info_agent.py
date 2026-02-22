@@ -1,4 +1,4 @@
-"""Certification information agent configuration and factory."""
+"""CertificationInfoAgent configuration and factory."""
 
 from __future__ import annotations
 
@@ -48,7 +48,7 @@ def create_cert_info_agent(
         credential=credential,
     )
     return client.create_agent(
-        name="cert-info-agent",
+        name="CertificationInfoAgent",
         instructions=INSTRUCTIONS,
         tools=[mcp_tool],
     )

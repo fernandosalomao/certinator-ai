@@ -1,16 +1,16 @@
 """
-Certinator AI — Study Plan Scheduler Executor
+Certinator AI — Study Plan Generator Executor
 
 Workflow node that converts structured topic/learning-path data into a
 concrete, week-by-week study plan.  Receives ``LearningPathsData`` from
-``LearningPathFetcherHandler``, then instructs the StudyPlan agent
+``LearningPathFetcherExecutor``, then instructs the StudyPlanGeneratorAgent
 (equipped with the ``schedule_study_plan`` math tool) to generate a
 Markdown schedule.  Output flows to ``CriticExecutor`` for quality
 validation.
 
 Graph position::
 
-    LearningPathFetcherHandler ──► StudyPlanSchedulerHandler ──► CriticExecutor
+    LearningPathFetcherExecutor ──► StudyPlanGeneratorExecutor ──► CriticExecutor
                                             ▲                          │
                                             └──── RevisionRequest ─────┘
 """
@@ -36,7 +36,7 @@ from tools.schedule import schedule_study_plan
 logger = logging.getLogger(__name__)
 
 
-class StudyPlanSchedulerHandler(Executor):
+class StudyPlanGeneratorExecutor(Executor):
     """
     Generate a week-by-week study plan using topic data + a math tool.
 
@@ -44,12 +44,12 @@ class StudyPlanSchedulerHandler(Executor):
     1. Receive ``LearningPathsData`` from the fetcher.
     2. Derive study constraints (hours/week, weeks, deadline mode).
     3. Execute ``schedule_study_plan`` directly to guarantee arithmetic.
-    4. Ask the StudyPlan agent to format the computed schedule as Markdown.
+    4. Ask the StudyPlanGeneratorAgent to format the computed schedule as Markdown.
     5. Forward the resulting ``SpecialistOutput``.
 
     Flow (revision after Critic FAIL):
     1. Receive ``RevisionRequest`` with previous content + feedback.
-    2. Re-run the StudyPlan agent asking it to fix the issues.
+    2. Re-run the StudyPlanGeneratorAgent asking it to fix the issues.
     3. Forward updated ``SpecialistOutput`` to the CriticExecutor.
     """
 
@@ -58,10 +58,10 @@ class StudyPlanSchedulerHandler(Executor):
     def __init__(
         self,
         study_plan_agent: ChatAgent,
-        id: str = "study-plan-scheduler",
+        id: str = "study-plan-generator-executor",
     ):
         """
-        Initialise with the study plan agent.
+        Initialise with the study plan generator agent.
 
         Parameters:
             study_plan_agent (ChatAgent): Agent with schedule_study_plan tool.
@@ -85,7 +85,7 @@ class StudyPlanSchedulerHandler(Executor):
         """
         await update_workflow_progress(
             ctx=ctx,
-            route="study_plan",
+            route="study-plan-generator",
             active_executor=self.id,
             message="Building a week-by-week study schedule...",
             current_step=3,
@@ -117,7 +117,7 @@ class StudyPlanSchedulerHandler(Executor):
         """
         await update_workflow_progress(
             ctx=ctx,
-            route="study_plan",
+            route="study-plan-generator",
             active_executor=self.id,
             message="Refining the study schedule based on quality review...",
             current_step=3,
@@ -139,7 +139,7 @@ class StudyPlanSchedulerHandler(Executor):
         plan_messages = [ChatMessage(role=Role.USER, text=prompt)]
 
         logger.info(
-            "StudyPlanScheduler revision (iteration %d): %s",
+            "StudyPlanGenerator revision (iteration %d): %s",
             revision.iteration,
             cert,
         )
@@ -186,7 +186,7 @@ class StudyPlanSchedulerHandler(Executor):
         topics_json = json.dumps(data.topics, ensure_ascii=False)
 
         logger.info(
-            "StudyPlanScheduler: invoking schedule_study_plan (hours_per_week=%s, total_weeks=%s, prioritize_by_date=%s)",
+            "StudyPlanGenerator: invoking schedule_study_plan (hours_per_week=%s, total_weeks=%s, prioritize_by_date=%s)",
             constraints["hours_per_week"],
             constraints["total_weeks"],
             constraints["prioritize_by_date"],
@@ -214,7 +214,7 @@ class StudyPlanSchedulerHandler(Executor):
         )
         plan_messages = [ChatMessage(role=Role.USER, text=prompt)]
 
-        logger.info("StudyPlanScheduler: generating plan for %s", cert)
+        logger.info("StudyPlanGenerator: generating plan for %s", cert)
         response = await self.study_plan_agent.run(plan_messages)
         plan_text = extract_response_text(
             response,
@@ -222,7 +222,7 @@ class StudyPlanSchedulerHandler(Executor):
         )
         if self._looks_like_json(plan_text):
             logger.warning(
-                "StudyPlanScheduler: agent returned JSON; using deterministic Markdown fallback"
+                "StudyPlanGenerator: agent returned JSON; using deterministic Markdown fallback"
             )
             return self._render_markdown_from_schedule(
                 cert=cert,

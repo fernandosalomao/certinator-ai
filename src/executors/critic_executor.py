@@ -1,18 +1,18 @@
 """
 Certinator AI — Critic Executor
 
-Workflow node that validates specialist output through the Critic
-agent and either emits the final response or routes back to the
-specialist handler for revision via a RevisionRequest.
+Workflow node that validates specialist output through the CriticAgent
+and either emits the final response or routes back to the
+specialist executor for revision via a RevisionRequest.
 
 Graph position::
 
-    CertInfoHandler  ──┐
-    StudyPlanHandler ──┤
-                       ▼
-                  CriticExecutor
-                   ├── PASS → emit response (terminal)
-                   └── FAIL → RevisionRequest → source handler (loop)
+    CertificationInfoExecutor  ──┐
+    StudyPlanGeneratorExecutor ──┤
+                               │
+                          CriticExecutor
+                           ├── PASS → emit response (terminal)
+                           └── FAIL → RevisionRequest → source executor (loop)
 """
 
 import logging
@@ -85,14 +85,18 @@ class CriticExecutor(Executor):
             output (SpecialistOutput): Content from a specialist.
             ctx (WorkflowContext): Workflow context for messaging.
         """
-        route = "study_plan" if output.content_type == "study_plan" else "cert_info"
-        total_steps = 5 if route == "study_plan" else 3
+        route = (
+            "study-plan-generator"
+            if output.content_type == "study_plan"
+            else "certification-info"
+        )
+        total_steps = 5 if route == "study-plan-generator" else 3
         await update_workflow_progress(
             ctx=ctx,
             route=route,
             active_executor=self.id,
             message="Validating generated content quality...",
-            current_step=4 if route == "study_plan" else 3,
+            current_step=4 if route == "study-plan-generator" else 3,
             total_steps=total_steps,
         )
 
@@ -120,7 +124,7 @@ class CriticExecutor(Executor):
                     verdict.confidence,
                 )
 
-            # Study plan outputs route to PostStudyPlanHandler
+            # Study plan outputs route to PostStudyPlanExecutor
             # for a HITL practice-question offer.
             if output.content_type == "study_plan":
                 await ctx.send_message(
@@ -133,7 +137,7 @@ class CriticExecutor(Executor):
             else:
                 await update_workflow_progress(
                     ctx=ctx,
-                    route="cert_info",
+                    route="certification-info",
                     active_executor=self.id,
                     message="Certification information is ready.",
                     current_step=3,
@@ -151,7 +155,7 @@ class CriticExecutor(Executor):
                 route=route,
                 active_executor=self.id,
                 message="Quality review requested revisions...",
-                current_step=4 if route == "study_plan" else 3,
+                current_step=4 if route == "study-plan-generator" else 3,
                 total_steps=total_steps,
             )
             logger.info(

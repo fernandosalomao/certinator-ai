@@ -1,4 +1,4 @@
-"""Practice question agent configuration and factory."""
+"""PracticeQuestionsAgent configuration and factory."""
 
 from __future__ import annotations
 
@@ -63,6 +63,6 @@ def create_practice_agent(
         credential=credential,
     )
     return client.create_agent(
-        name="practice-question-agent",
+        name="PracticeQuestionsAgent",
         instructions=INSTRUCTIONS,
     )

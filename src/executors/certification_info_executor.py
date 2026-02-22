@@ -1,13 +1,13 @@
 """
-Certinator AI — CertInfo Handler Executor
+Certinator AI — CertificationInfo Executor
 
 Workflow node that retrieves certification information using the
-CertInfo agent (with MS Learn MCP tool).  Outputs a SpecialistOutput
+CertificationInfoAgent (with MS Learn MCP tool).  Outputs a SpecialistOutput
 that the CriticExecutor validates downstream.
 
 Graph position::
 
-    CoordinatorRouter ──► CertInfoHandler ──► CriticExecutor
+    CoordinatorExecutor ──► CertificationInfoExecutor ──► CriticExecutor
                               ▲                    │
                               └── RevisionRequest ─┘
 """
@@ -29,11 +29,11 @@ from executors.models import RevisionRequest, RoutingDecision, SpecialistOutput
 logger = logging.getLogger(__name__)
 
 
-class CertInfoHandler(Executor):
+class CertificationInfoExecutor(Executor):
     """
     Retrieve Microsoft certification information.
 
-    Uses the CertInfo ChatAgent (equipped with the MS Learn MCP tool)
+    Uses the CertificationInfoAgent (equipped with the MS Learn MCP tool)
     to search official Microsoft Learn content.  Output flows to the
     CriticExecutor for quality validation.
     """
@@ -43,10 +43,10 @@ class CertInfoHandler(Executor):
     def __init__(
         self,
         cert_info_agent: ChatAgent,
-        id: str = "cert-info-handler",
+        id: str = "certification-info-executor",
     ):
         """
-        Initialise the handler with the CertInfo agent.
+        Initialise the executor with the CertificationInfoAgent.
 
         Parameters:
             cert_info_agent (ChatAgent): Agent with MS Learn MCP access.
@@ -70,7 +70,7 @@ class CertInfoHandler(Executor):
         """
         await update_workflow_progress(
             ctx=ctx,
-            route="cert_info",
+            route="certification-info",
             active_executor=self.id,
             message="Retrieving certification details from Microsoft Learn...",
             current_step=2,
@@ -102,7 +102,7 @@ class CertInfoHandler(Executor):
         """
         await update_workflow_progress(
             ctx=ctx,
-            route="cert_info",
+            route="certification-info",
             active_executor=self.id,
             message="Refining certification details based on quality review...",
             current_step=2,
@@ -122,7 +122,7 @@ class CertInfoHandler(Executor):
         messages = [ChatMessage(role=Role.USER, text=prompt)]
 
         logger.info(
-            "CertInfo revision (iteration %d): %s",
+            "CertificationInfo revision (iteration %d): %s",
             revision.iteration,
             cert,
         )
@@ -151,7 +151,7 @@ class CertInfoHandler(Executor):
         decision: RoutingDecision,
     ) -> str:
         """
-        Call the CertInfo agent with the routing decision context.
+        Call the CertificationInfoAgent with the routing decision context.
 
         Parameters:
             decision (RoutingDecision): Original routing decision.
@@ -167,7 +167,7 @@ class CertInfoHandler(Executor):
         )
         messages = [ChatMessage(role=Role.USER, text=prompt)]
 
-        logger.info("CertInfo agent processing: %s", cert)
+        logger.info("CertificationInfo agent processing: %s", cert)
         response = await self.cert_info_agent.run(messages)
         return extract_response_text(
             response,

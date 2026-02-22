@@ -1,16 +1,16 @@
 """
 Certinator AI — Learning Path Fetcher Executor
 
-New workflow node that sits between CoordinatorRouter and
-StudyPlanSchedulerHandler.  Uses the LearningPathFetcher agent (which
+Workflow node that sits between CoordinatorExecutor and
+StudyPlanGeneratorExecutor.  Uses the LearningPathFetcherAgent (which
 has the MS Learn MCP tool) to retrieve exam topics, their percentage
 weights, and the corresponding Microsoft Learn learning paths with
 estimated durations.  Output is a structured LearningPathsData message
-consumed by StudyPlanSchedulerHandler.
+consumed by StudyPlanGeneratorExecutor.
 
 Graph position::
 
-    CoordinatorRouter ──► LearningPathFetcherHandler ──► StudyPlanSchedulerHandler
+    CoordinatorExecutor ──► LearningPathFetcherExecutor ──► StudyPlanGeneratorExecutor
 """
 
 import logging
@@ -36,17 +36,17 @@ from executors.models import (
 logger = logging.getLogger(__name__)
 
 
-class LearningPathFetcherHandler(Executor):
+class LearningPathFetcherExecutor(Executor):
     """
     Fetch exam topics and learning paths from Microsoft Learn.
 
-    Uses the LearningPathFetcher agent (equipped with the MS Learn MCP
+    Uses the LearningPathFetcherAgent (equipped with the MS Learn MCP
     tool) to search for exam objectives, skill weights, and the
     corresponding official learning paths with their durations.
 
     The agent is called with a structured response format and this
-    handler emits a ``LearningPathsData`` message to the
-    ``StudyPlanSchedulerHandler``.
+    executor emits a ``LearningPathsData`` message to the
+    ``StudyPlanGeneratorExecutor``.
     """
 
     learning_path_agent: ChatAgent
@@ -54,7 +54,7 @@ class LearningPathFetcherHandler(Executor):
     def __init__(
         self,
         learning_path_agent: ChatAgent,
-        id: str = "learning-path-fetcher",
+        id: str = "learning-path-fetcher-executor",
     ):
         """
         Initialise with the learning path fetcher agent.
@@ -82,7 +82,7 @@ class LearningPathFetcherHandler(Executor):
         cert = decision.certification or "the requested certification"
         await update_workflow_progress(
             ctx=ctx,
-            route="study_plan",
+            route="study-plan-generator",
             active_executor=self.id,
             message="Fetching official Microsoft Learn topics and paths...",
             current_step=2,
@@ -129,7 +129,7 @@ class LearningPathFetcherHandler(Executor):
 
         Triggered when a student fails a practice quiz and wants
         a focused study plan.  Fetches full topic data and forwards
-        to StudyPlanSchedulerHandler via LearningPathsData.
+        to StudyPlanGeneratorExecutor via LearningPathsData.
 
         Parameters:
             request (StudyPlanFromQuizRequest): Quiz failure data.
@@ -138,7 +138,7 @@ class LearningPathFetcherHandler(Executor):
         cert = request.certification
         await update_workflow_progress(
             ctx=ctx,
-            route="study_plan",
+            route="study-plan-generator",
             active_executor=self.id,
             message="Fetching focused learning paths for weak quiz topics...",
             current_step=2,

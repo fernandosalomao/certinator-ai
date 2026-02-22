@@ -2,34 +2,34 @@
 Certinator AI — Workflow Graph Builder
 
 Constructs the MAF graph-based workflow that wires the Coordinator
-router to specialist handlers, with a shared CriticExecutor node
+executor to specialist executors, with a shared CriticExecutor node
 that validates output and can loop back for revision.
 
 Graph topology::
 
-    CoordinatorRouter (start)
+    CoordinatorExecutor (start)
         │
         └── switch-case on RoutingDecision.route:
-              ├── "cert_info"  → CertInfoHandler  ──► CriticExecutor
-              │                                         ├── PASS → emit
-              │                                         └── FAIL → revision
+              ├── "certification-info"  → CertificationInfoExecutor  ──► CriticExecutor
+              │                                                             ├── PASS → emit
+              │                                                             └── FAIL → revision
               │
-              ├── "study_plan" → LearningPathFetcherHandler
-              │                        │ (LearningPathsData)
-              │                        ▼
-              │                  StudyPlanSchedulerHandler ──► CriticExecutor
-              │                                                  ├── PASS → PostStudyPlanHandler
-              │                                                  │             ├── HITL YES → PracticeQuizOrchestrator
-              │                                                  │             └── HITL NO  → end
-              │                                                  └── FAIL → revision
+              ├── "study-plan-generator" → LearningPathFetcherExecutor
+              │                                 │ (LearningPathsData)
+              │                                 ▼
+              │                          StudyPlanGeneratorExecutor ──► CriticExecutor
+              │                                                            ├── PASS → PostStudyPlanExecutor
+              │                                                            │             ├── HITL YES → PracticeQuestionsExecutor
+              │                                                            │             └── HITL NO  → end
+              │                                                            └── FAIL → revision
               │
-              ├── "practice"   → PracticeQuizOrchestrator (HITL quiz loop)
-              │                        ├── PASS  → congratulations (terminal)
-              │                        └── FAIL  → HITL study plan offer
-              │                              ├── YES → LearningPathFetcher pipeline
-              │                              └── NO  → end
+              ├── "practice-questions"   → PracticeQuestionsExecutor (HITL quiz loop)
+              │                                 ├── PASS  → congratulations (terminal)
+              │                                 └── FAIL  → HITL study plan offer
+              │                                       ├── YES → LearningPathFetcher pipeline
+              │                                       └── NO  → end
               │
-              └── default      → GeneralHandler
+              └── default      → GeneralExecutor
 """
 
 import logging
@@ -60,19 +60,19 @@ from agents import (
 from config import (
     FOUNDRY_PROJECT_ENDPOINT,
 )
-from executors.cert_info import CertInfoHandler
-from executors.coordinator import CoordinatorRouter
-from executors.critic import CriticExecutor
-from executors.learning_path_fetcher import LearningPathFetcherHandler
+from executors.certification_info_executor import CertificationInfoExecutor
+from executors.coordinator_executor import CoordinatorExecutor
+from executors.critic_executor import CriticExecutor
+from executors.learning_path_fetcher_executor import LearningPathFetcherExecutor
 from executors.models import (
     ApprovedStudyPlanOutput,
     RevisionRequest,
     RoutingDecision,
     StudyPlanFromQuizRequest,
 )
-from executors.post_study_plan import PostStudyPlanHandler
-from executors.practice import PracticeQuizOrchestrator
-from executors.study_plan import StudyPlanSchedulerHandler
+from executors.post_study_plan_executor import PostStudyPlanExecutor
+from executors.practice_questions_executor import PracticeQuestionsExecutor
+from executors.study_plan_generator_executor import StudyPlanGeneratorExecutor
 from tools.mcp import create_ms_learn_mcp_tool
 from tools.schedule import schedule_study_plan
 
@@ -87,7 +87,7 @@ def _is_route(expected: str):
     Return a predicate that matches a RoutingDecision with the given route.
 
     Parameters:
-        expected (str): The route value to match (e.g. "cert_info").
+        expected (str): The route value to match (e.g. "certification-info").
 
     Returns:
         Callable[[Any], bool]: Predicate for switch-case edges.
@@ -108,7 +108,7 @@ def _revision_for(executor_id: str):
     handlers so each handler only receives its own revision requests.
 
     Parameters:
-        executor_id (str): Target handler ID (e.g. "cert-info-handler").
+        executor_id (str): Target executor ID (e.g. "certification-info-executor").
 
     Returns:
         Callable[[Any], bool]: Predicate for conditional edges.
@@ -127,7 +127,7 @@ def _is_approved_study_plan(msg: Any) -> bool:
     """Match an ApprovedStudyPlanOutput from the CriticExecutor.
 
     Used on the conditional edge from CriticExecutor to
-    PostStudyPlanHandler so that only approved study plans
+    PostStudyPlanExecutor so that only approved study plans
     are forwarded for the HITL practice-question offer.
 
     Parameters:
@@ -140,13 +140,13 @@ def _is_approved_study_plan(msg: Any) -> bool:
 
 
 def _is_study_plan_from_quiz(msg: Any) -> bool:
-    """Match a StudyPlanFromQuizRequest from PracticeQuizOrchestrator.
+    """Match a StudyPlanFromQuizRequest from PracticeQuestionsExecutor.
 
     Routes the post-quiz study plan request to
-    LearningPathFetcherHandler.
+    LearningPathFetcherExecutor.
 
     Parameters:
-        msg (Any): Message from PracticeQuizOrchestrator.
+        msg (Any): Message from PracticeQuestionsExecutor.
 
     Returns:
         bool: True if the message is a StudyPlanFromQuizRequest.
@@ -157,7 +157,7 @@ def _is_study_plan_from_quiz(msg: Any) -> bool:
 # ── General-response handler (function-based executor) ────────────────────
 
 
-@executor(id="general-handler")
+@executor(id="general-executor")
 async def general_handler(
     decision: RoutingDecision,
     ctx: WorkflowContext,
@@ -177,7 +177,7 @@ async def general_handler(
     text = decision.response or "How can I help you today?"
     await ctx.add_event(
         AgentRunUpdateEvent(
-            "general-handler",
+            "general-executor",
             data=AgentRunResponseUpdate(
                 contents=[TextContent(text=text)],
                 role=Role.ASSISTANT,
@@ -206,7 +206,7 @@ async def build_workflow():
         credential,
     )
 
-    # CertInfo agent with MS Learn MCP tool (client-side for Inspector visibility)
+    # CertificationInfoAgent with MS Learn MCP tool (client-side for Inspector visibility)
     mcp_tool = create_ms_learn_mcp_tool()
     cert_info_agent = create_cert_info_agent(
         FOUNDRY_PROJECT_ENDPOINT,
@@ -221,7 +221,7 @@ async def build_workflow():
         mcp_tool,
     )
 
-    # StudyPlan agent: uses math tool only — NO MCP (data comes from fetcher)
+    # StudyPlanGeneratorAgent: uses math tool only — NO MCP (data comes from fetcher)
     study_plan_agent = create_study_plan_agent(
         FOUNDRY_PROJECT_ENDPOINT,
         credential,
@@ -239,80 +239,80 @@ async def build_workflow():
     )
 
     # ── Instantiate executors ─────────────────────────────────────────
-    coordinator_router = CoordinatorRouter(coordinator_agent)
+    coordinator_executor = CoordinatorExecutor(coordinator_agent)
 
-    cert_info_handler = CertInfoHandler(
+    certification_info_executor = CertificationInfoExecutor(
         cert_info_agent=cert_info_agent,
     )
-    learning_path_fetcher = LearningPathFetcherHandler(
+    learning_path_fetcher_executor = LearningPathFetcherExecutor(
         learning_path_agent=learning_path_agent,
     )
-    study_plan_scheduler = StudyPlanSchedulerHandler(
+    study_plan_generator_executor = StudyPlanGeneratorExecutor(
         study_plan_agent=study_plan_agent,
     )
-    practice_handler = PracticeQuizOrchestrator(
+    practice_questions_executor = PracticeQuestionsExecutor(
         practice_agent=practice_agent,
         learning_path_agent=learning_path_agent,
     )
     critic_executor = CriticExecutor(
         critic_agent=critic_agent,
     )
-    post_study_plan_handler = PostStudyPlanHandler()
+    post_study_plan_executor = PostStudyPlanExecutor()
 
     # ── Build the workflow graph ──────────────────────────────────────
     workflow = (
         WorkflowBuilder()
-        .set_start_executor(coordinator_router)
+        .set_start_executor(coordinator_executor)
         .add_switch_case_edge_group(
-            coordinator_router,
+            coordinator_executor,
             [
                 Case(
-                    condition=_is_route("cert_info"),
-                    target=cert_info_handler,
+                    condition=_is_route("certification-info"),
+                    target=certification_info_executor,
                 ),
                 Case(
-                    condition=_is_route("study_plan"),
-                    target=learning_path_fetcher,
+                    condition=_is_route("study-plan-generator"),
+                    target=learning_path_fetcher_executor,
                 ),
                 Case(
-                    condition=_is_route("practice"),
-                    target=practice_handler,
+                    condition=_is_route("practice-questions"),
+                    target=practice_questions_executor,
                 ),
                 Default(target=general_handler),
             ],
         )
         # Specialist → Critic validation edges
-        .add_edge(cert_info_handler, critic_executor)
-        # LearningPathFetcher → StudyPlanScheduler pipeline
-        .add_edge(learning_path_fetcher, study_plan_scheduler)
-        .add_edge(study_plan_scheduler, critic_executor)
-        # Critic → PostStudyPlanHandler (approved study plans)
+        .add_edge(certification_info_executor, critic_executor)
+        # LearningPathFetcherExecutor → StudyPlanGeneratorExecutor pipeline
+        .add_edge(learning_path_fetcher_executor, study_plan_generator_executor)
+        .add_edge(study_plan_generator_executor, critic_executor)
+        # Critic → PostStudyPlanExecutor (approved study plans)
         .add_edge(
             critic_executor,
-            post_study_plan_handler,
+            post_study_plan_executor,
             condition=_is_approved_study_plan,
         )
-        # PostStudyPlanHandler → Practice (student wants practice)
+        # PostStudyPlanExecutor → Practice (student wants practice)
         .add_edge(
-            post_study_plan_handler,
-            practice_handler,
+            post_study_plan_executor,
+            practice_questions_executor,
         )
-        # Practice → LearningPathFetcher (post-quiz study plan)
+        # Practice → LearningPathFetcherExecutor (post-quiz study plan)
         .add_edge(
-            practice_handler,
-            learning_path_fetcher,
+            practice_questions_executor,
+            learning_path_fetcher_executor,
             condition=_is_study_plan_from_quiz,
         )
         # Critic → Specialist revision loops (conditional)
         .add_edge(
             critic_executor,
-            cert_info_handler,
-            condition=_revision_for("cert-info-handler"),
+            certification_info_executor,
+            condition=_revision_for("certification-info-executor"),
         )
         .add_edge(
             critic_executor,
-            study_plan_scheduler,
-            condition=_revision_for("study-plan-scheduler"),
+            study_plan_generator_executor,
+            condition=_revision_for("study-plan-generator-executor"),
         )
         .build()
     )

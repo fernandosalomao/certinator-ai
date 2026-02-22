@@ -1,9 +1,9 @@
 """Certinator AI — Agent configuration package."""
 
-from .cert_info_agent import (
+from .certification_info_agent import (
     INSTRUCTIONS as CERT_INFO_INSTRUCTIONS,
 )
-from .cert_info_agent import (
+from .certification_info_agent import (
     create_cert_info_agent,
 )
 from .coordinator_agent import (
@@ -24,16 +24,16 @@ from .learning_path_fetcher_agent import (
 from .learning_path_fetcher_agent import (
     create_learning_path_fetcher_agent,
 )
-from .practice_agent import (
+from .practice_questions_agent import (
     INSTRUCTIONS as PRACTICE_INSTRUCTIONS,
 )
-from .practice_agent import (
+from .practice_questions_agent import (
     create_practice_agent,
 )
-from .study_plan_agent import (
+from .study_plan_generator_agent import (
     INSTRUCTIONS as STUDY_PLAN_INSTRUCTIONS,
 )
-from .study_plan_agent import (
+from .study_plan_generator_agent import (
     create_study_plan_agent,
 )
 

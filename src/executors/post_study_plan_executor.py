@@ -1,5 +1,5 @@
 """
-Certinator AI — Post-Study-Plan Handler
+Certinator AI — Post-Study-Plan Executor
 
 HITL executor that offers practice questions after a study plan
 has been approved by the Critic.  Intercepts approved study plan
@@ -7,9 +7,9 @@ output and asks the student if they want to practice.
 
 Graph position::
 
-    CriticExecutor ──[study_plan PASS]──► PostStudyPlanHandler
+    CriticExecutor ──[study-plan-generator PASS]──► PostStudyPlanExecutor
                                              ├── HITL YES → RoutingDecision
-                                             │               → PracticeQuizOrchestrator
+                                             │               → PracticeQuestionsExecutor
                                              └── HITL NO  → end
 """
 
@@ -34,7 +34,7 @@ logger = logging.getLogger(__name__)
 POST_STUDY_PLAN_CTX_KEY = "post_study_plan_context"
 
 
-class PostStudyPlanHandler(Executor):
+class PostStudyPlanExecutor(Executor):
     """Offer practice questions after a study plan is delivered.
 
     Receives ``ApprovedStudyPlanOutput`` from CriticExecutor,
@@ -44,9 +44,9 @@ class PostStudyPlanHandler(Executor):
 
     def __init__(
         self,
-        id: str = "post-study-plan-handler",
+        id: str = "post-study-plan-executor",
     ):
-        """Initialise the post-study-plan handler.
+        """Initialise the post-study-plan executor.
 
         Parameters:
             id (str): Executor identifier.
@@ -72,7 +72,7 @@ class PostStudyPlanHandler(Executor):
         """
         await update_workflow_progress(
             ctx=ctx,
-            route="study_plan",
+            route="study-plan-generator",
             active_executor=self.id,
             message="Study plan is ready.",
             current_step=5,
@@ -161,10 +161,10 @@ class PostStudyPlanHandler(Executor):
             )
 
             # Send a RoutingDecision that the
-            # PracticeQuizOrchestrator will handle.
+            # PracticeQuestionsExecutor will handle.
             await ctx.send_message(
                 RoutingDecision(
-                    route="practice",
+                    route="practice-questions",
                     task=(f"Generate practice questions for {cert}"),
                     certification=cert,
                     context=(f"Based on study plan. {context}"),

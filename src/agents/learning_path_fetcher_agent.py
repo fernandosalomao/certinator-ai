@@ -1,4 +1,4 @@
-"""Learning path fetcher agent configuration and factory."""
+"""LearningPathFetcherAgent configuration and factory."""
 
 from __future__ import annotations
 
@@ -47,7 +47,7 @@ def create_learning_path_fetcher_agent(
         credential=credential,
     )
     return client.create_agent(
-        name="learning-path-fetcher-agent",
+        name="LearningPathFetcherAgent",
         instructions=INSTRUCTIONS,
         tools=[mcp_tool],
     )

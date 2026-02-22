@@ -18,7 +18,9 @@ from pydantic import BaseModel, ConfigDict, Field
 class RoutingDecision(BaseModel):
     """Structured routing decision produced by the Coordinator agent."""
 
-    route: Literal["cert_info", "study_plan", "practice", "general"] = Field(
+    route: Literal[
+        "certification-info", "study-plan-generator", "practice-questions", "general"
+    ] = Field(
         description="Target specialist route.",
     )
     task: str = Field(
@@ -43,7 +45,9 @@ class CoordinatorResponse(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    route: Literal["cert_info", "study_plan", "practice", "general"] = Field(
+    route: Literal[
+        "certification-info", "study-plan-generator", "practice-questions", "general"
+    ] = Field(
         description="Target specialist route.",
     )
     task: str = Field(description="Clear task description for the specialist.")
@@ -77,7 +81,7 @@ class CriticVerdictResponse(BaseModel):
 class SpecialistOutput(BaseModel):
     """Content produced by a specialist handler, routed to the Critic.
 
-    Flows from CertInfoHandler / StudyPlanHandler → CriticExecutor as
+    Flows from CertificationInfoExecutor / StudyPlanGeneratorExecutor → CriticExecutor as
     the typed message that the workflow graph routes via edges.
     """
 
@@ -133,9 +137,9 @@ class LearningPathFetcherResponse(BaseModel):
 
 
 class LearningPathsData(BaseModel):
-    """Structured output from LearningPathFetcherHandler.
+    """Structured output from LearningPathFetcherExecutor.
 
-    Flows from LearningPathFetcherHandler → StudyPlanSchedulerHandler
+    Flows from LearningPathFetcherExecutor → StudyPlanGeneratorExecutor
     and carries all the topic/learning-path data the scheduler needs
     to compute a feasible study schedule.
     """
@@ -254,8 +258,8 @@ class QuizState(BaseModel):
 class StudyPlanFromQuizRequest(BaseModel):
     """Routes from a failed quiz to the study plan pipeline.
 
-    Emitted by PracticeQuizOrchestrator when the student fails and
-    wants a focused study plan.  Routed to LearningPathFetcherHandler.
+    Emitted by PracticeQuestionsExecutor when the student fails and
+    wants a focused study plan.  Routed to LearningPathFetcherExecutor.
     """
 
     certification: str = Field(
@@ -273,10 +277,10 @@ class StudyPlanFromQuizRequest(BaseModel):
 
 
 class ApprovedStudyPlanOutput(BaseModel):
-    """Critic-approved study plan forwarded to PostStudyPlanHandler.
+    """Critic-approved study plan forwarded to PostStudyPlanExecutor.
 
     Emitted by CriticExecutor on PASS for study_plan content so that
-    PostStudyPlanHandler can offer practice questions via HITL.
+    PostStudyPlanExecutor can offer practice questions via HITL.
     """
 
     content: str = Field(
