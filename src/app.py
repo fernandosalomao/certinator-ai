@@ -22,7 +22,6 @@ from typing import Any
 from ag_ui.core import BaseEvent
 from agent_framework import (
     ChatMessage,
-    FunctionApprovalResponseContent,
     FunctionResultContent,
     Role,
 )
@@ -387,88 +386,6 @@ class RequestInfoOrchestrator(Orchestrator):
 
 
 # ---------------------------------------------------------------------------
-# Agent-level HITL message filter
-# ---------------------------------------------------------------------------
-# ``from_agent_framework()`` (used in ``run_server()``) does not
-# expose an orchestrator chain, so for that code-path we wrap the
-# workflow agent in a transparent proxy that filters messages at
-# the ``run_stream()`` level.  This is the same fix the
-# ``RequestInfoOrchestrator`` applies for ``run_agui()``.
-# ---------------------------------------------------------------------------
-
-_FN_CONTENT_TYPES = (
-    FunctionResultContent,
-    FunctionApprovalResponseContent,
-)
-
-
-class _RequestInfoMessageFilter:
-    """Proxy that filters messages for request_info HITL.
-
-    When the MAF workflow agent has pending ``request_info``
-    calls, strips messages whose contents do not include
-    ``FunctionResultContent`` or
-    ``FunctionApprovalResponseContent`` so that
-    ``_extract_function_responses()`` does not raise on
-    ``TextContent`` from the full conversation history.
-    """
-
-    def __init__(self, agent: Any) -> None:
-        """Wrap the workflow agent."""
-        object.__setattr__(self, "_agent", agent)
-
-    def __getattr__(self, name: str) -> Any:
-        """Forward attribute access."""
-        return getattr(
-            object.__getattribute__(self, "_agent"),
-            name,
-        )
-
-    def __setattr__(self, name: str, value: Any) -> None:
-        """Forward attribute writes."""
-        setattr(
-            object.__getattribute__(self, "_agent"),
-            name,
-            value,
-        )
-
-    async def run_stream(
-        self,
-        input_messages: list[ChatMessage],
-        **kwargs: Any,
-    ) -> AsyncGenerator:
-        """Filter messages when pending request_info calls exist.
-
-        Parameters:
-            input_messages: Full conversation messages.
-            **kwargs: Forwarded to the inner agent.
-
-        Yields:
-            AgentRunResponseUpdate from the inner agent.
-        """
-        agent = object.__getattribute__(self, "_agent")
-        if hasattr(agent, "pending_requests") and agent.pending_requests:
-            filtered = [
-                msg
-                for msg in input_messages
-                if any(
-                    isinstance(c, _FN_CONTENT_TYPES)
-                    for c in (getattr(msg, "contents", None) or [])
-                )
-            ]
-            if filtered:
-                logger.debug(
-                    "request_info HITL: forwarding %d/%d messages",
-                    len(filtered),
-                    len(input_messages),
-                )
-                input_messages = filtered
-
-        async for update in agent.run_stream(input_messages, **kwargs):
-            yield update
-
-
-# ---------------------------------------------------------------------------
 # AG_UI
 # ---------------------------------------------------------------------------
 async def run_agui() -> None:
@@ -588,11 +505,6 @@ async def run_server():
         predict_state_config=_build_predict_state_config(),
         require_confirmation=False,
     )
-
-    # Wrap in the HITL message filter so that
-    # ``_extract_function_responses()`` does not raise when
-    # CopilotKit replays the full conversation history.
-    # agent = _RequestInfoMessageFilter(agent)
 
     try:
         await from_agent_framework(ag_agent).run_async()

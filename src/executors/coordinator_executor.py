@@ -22,9 +22,6 @@ from executors.models import CoordinatorResponse, RoutingDecision
 
 logger = logging.getLogger(__name__)
 
-# Workflow-state key used to share the original conversation with handlers.
-MESSAGES_KEY = "conversation_messages"
-
 
 class CoordinatorExecutor(Executor):
     """
@@ -56,19 +53,15 @@ class CoordinatorExecutor(Executor):
         """
         Route incoming messages to the appropriate specialist.
 
-        1. Store conversation in workflow state for downstream access.
-        2. Call the Coordinator LLM.
-        3. Parse the JSON routing decision.
-        4. Forward via ``ctx.send_message``.
+        1. Call the Coordinator LLM.
+        2. Parse the JSON routing decision.
+        3. Forward via ``ctx.send_message``.
 
         Parameters:
             messages (list[ChatMessage]): Full conversation history.
             ctx (WorkflowContext[RoutingDecision]): Typed context that
                 sends a RoutingDecision to downstream nodes.
         """
-        # Persist the conversation so specialist handlers can retrieve it.
-        await ctx.shared_state.set(MESSAGES_KEY, messages)
-
         response = await self.agent.run(
             messages,
             response_format=CoordinatorResponse,

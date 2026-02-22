@@ -19,10 +19,6 @@ from agent_framework import (
     WorkflowContext,
 )
 
-WORKFLOW_PROGRESS_KEY = "workflow_progress"
-QUIZ_STATE_KEY = "active_quiz_state"
-POST_STUDY_PLAN_KEY = "post_study_plan_context"
-
 
 def extract_response_text(
     response: Any,

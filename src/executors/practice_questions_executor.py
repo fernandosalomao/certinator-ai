@@ -733,31 +733,3 @@ class PracticeQuestionsExecutor(Executor):
         if match:
             return max(1, min(int(match.group(1)), 50))
         return DEFAULT_PRACTICE_QUESTIONS
-
-    @staticmethod
-    def _format_question(
-        question: PracticeQuestion,
-        index: int,
-        total: int,
-    ) -> str:
-        """Format a single question for HITL presentation.
-
-        Parameters:
-            question (PracticeQuestion): The question to format.
-            index (int): 0-based index.
-            total (int): Total number of questions.
-
-        Returns:
-            str: Formatted question markdown.
-        """
-        options_text = "\n".join(
-            f"  **{letter}.** {text}"
-            for letter, text in sorted(question.options.items())
-        )
-        return (
-            f"**Question {index + 1} of {total}** "
-            f"({question.topic} — {question.difficulty})\n\n"
-            f"{question.question_text}\n\n"
-            f"{options_text}\n\n"
-            "Type **A**, **B**, **C**, or **D**:"
-        )

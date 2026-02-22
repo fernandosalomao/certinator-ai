@@ -11,7 +11,6 @@ so the model never has to calculate hours itself.
 from __future__ import annotations
 
 import json
-import math
 from typing import Annotated
 
 from agent_framework import ai_function
