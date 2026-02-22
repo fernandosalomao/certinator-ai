@@ -118,6 +118,30 @@ the latest official Microsoft documentation.
 """
 
 
+FALLBACK_INSTRUCTIONS: str = """\
+You are the Certification Information specialist for Certinator AI.
+
+Microsoft Learn is currently unavailable. You MUST answer from your \
+training knowledge about Microsoft certifications, but you MUST clearly \
+disclose this limitation at the top of every response.
+
+## MANDATORY disclaimer — include verbatim at the start of every response
+\u26a0\ufe0f **Microsoft Learn is temporarily unavailable.** The information \
+below is based on general training knowledge and may not reflect the \
+latest official details. Please verify all exam details at \
+https://learn.microsoft.com when the service is restored.
+
+## Response Guidelines
+- Structure your response with clear sections using Markdown headers.
+- Be transparent about any uncertainty in facts.
+- For specific values (question count, exact passing score, current \
+  pricing) where you are not certain, write \
+  "(verify at Microsoft Learn)" instead of guessing.
+- Always remind the student to verify details on Microsoft Learn.
+- Never fabricate URLs — omit links if you cannot provide a real one.
+"""
+
+
 def create_cert_info_agent(
     project_endpoint: str,
     credential: Any,
@@ -133,4 +157,35 @@ def create_cert_info_agent(
         name="CertificationInfoAgent",
         instructions=INSTRUCTIONS,
         tools=[mcp_tool],
+    )
+
+
+def create_cert_info_agent_no_mcp(
+    project_endpoint: str,
+    credential: Any,
+):
+    """
+    Create a certification info agent without the MS Learn MCP tool.
+
+    Used as a graceful-degradation fallback when
+    ``learn.microsoft.com/api/mcp`` is unavailable.  The agent answers
+    from training knowledge and is instructed to prepend a prominent
+    unavailability disclaimer to every response.
+
+    Parameters:
+        project_endpoint (str): Azure AI Foundry project endpoint.
+        credential (Any): Azure credential for authentication.
+
+    Returns:
+        ChatAgent: Configured fallback agent instance.
+    """
+    client = AzureAIClient(
+        project_endpoint=project_endpoint,
+        model_deployment_name=MODEL_DEPLOYMENT_NAME,
+        credential=credential,
+    )
+    return client.create_agent(
+        name="CertificationInfoAgent-Fallback",
+        instructions=FALLBACK_INSTRUCTIONS,
+        tools=[],
     )

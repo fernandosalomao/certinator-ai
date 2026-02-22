@@ -120,3 +120,12 @@ mcp_calls = _meter.create_counter(
     ),
     unit="1",
 )
+
+mcp_unavailable_events = _meter.create_counter(
+    name="certinator.mcp.unavailable_events",
+    description=(
+        "MCP unavailability events that triggered graceful degradation. "
+        "Attributes: executor, degraded (true/false)."
+    ),
+    unit="1",
+)

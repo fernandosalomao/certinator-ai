@@ -13,6 +13,7 @@ Graph position::
 """
 
 import logging
+from typing import Optional
 
 from agent_framework import (
     ChatAgent,
@@ -31,6 +32,7 @@ from executors import (
     update_workflow_progress,
 )
 from executors.models import RevisionRequest, RoutingDecision, SpecialistOutput
+from tools.mcp import is_mcp_error
 
 logger = logging.getLogger(__name__)
 
@@ -45,10 +47,12 @@ class CertificationInfoExecutor(Executor):
     """
 
     cert_info_agent: ChatAgent
+    cert_info_fallback_agent: Optional[ChatAgent]
 
     def __init__(
         self,
         cert_info_agent: ChatAgent,
+        cert_info_fallback_agent: Optional[ChatAgent] = None,
         id: str = "certification-info-executor",
     ):
         """
@@ -56,9 +60,13 @@ class CertificationInfoExecutor(Executor):
 
         Parameters:
             cert_info_agent (ChatAgent): Agent with MS Learn MCP access.
+            cert_info_fallback_agent (Optional[ChatAgent]): Agent without
+                MCP used when ``learn.microsoft.com/api/mcp`` is down.
+                When ``None``, MCP failures emit a generic error message.
             id (str): Executor identifier in the workflow graph.
         """
         self.cert_info_agent = cert_info_agent
+        self.cert_info_fallback_agent = cert_info_fallback_agent
         super().__init__(id=id)
 
     @handler
@@ -93,17 +101,47 @@ class CertificationInfoExecutor(Executor):
                 1,
                 {"executor": "certification-info", "status": "error"},
             )
-            logger.error(
-                "CertificationInfo agent call failed: %s",
-                exc,
-                exc_info=True,
-            )
-            await emit_response(
-                ctx,
-                self.id,
-                "I encountered an issue retrieving that information. Please try again.",
-            )
-            return
+            if is_mcp_error(exc) and self.cert_info_fallback_agent is not None:
+                metrics.mcp_unavailable_events.add(
+                    1,
+                    {
+                        "executor": "certification-info",
+                        "degraded": "true",
+                    },
+                )
+                logger.warning(
+                    "CertificationInfo MCP unavailable; degrading to "
+                    "general knowledge: %s",
+                    exc,
+                )
+                try:
+                    result_text = await self._fetch_cert_info_general(decision)
+                except Exception as fallback_exc:
+                    logger.error(
+                        "CertificationInfo fallback agent failed: %s",
+                        fallback_exc,
+                        exc_info=True,
+                    )
+                    await emit_response(
+                        ctx,
+                        self.id,
+                        "I encountered an issue retrieving that "
+                        "information. Please try again.",
+                    )
+                    return
+            else:
+                logger.error(
+                    "CertificationInfo agent call failed: %s",
+                    exc,
+                    exc_info=True,
+                )
+                await emit_response(
+                    ctx,
+                    self.id,
+                    "I encountered an issue retrieving that information. "
+                    "Please try again.",
+                )
+                return
         await ctx.send_message(
             SpecialistOutput(
                 content=result_text,
@@ -164,17 +202,49 @@ class CertificationInfoExecutor(Executor):
                 1,
                 {"executor": "certification-info", "status": "error"},
             )
-            logger.error(
-                "CertificationInfo revision agent call failed: %s",
-                exc,
-                exc_info=True,
-            )
-            await emit_response(
-                ctx,
-                self.id,
-                "I encountered an issue refining that information. Please try again.",
-            )
-            return
+            if is_mcp_error(exc) and self.cert_info_fallback_agent is not None:
+                metrics.mcp_unavailable_events.add(
+                    1,
+                    {
+                        "executor": "certification-info",
+                        "degraded": "true",
+                    },
+                )
+                logger.warning(
+                    "CertificationInfo revision MCP unavailable; degrading "
+                    "to general knowledge: %s",
+                    exc,
+                )
+                try:
+                    response = await safe_agent_run(
+                        self.cert_info_fallback_agent, messages
+                    )
+                except Exception as fallback_exc:
+                    logger.error(
+                        "CertificationInfo fallback revision failed: %s",
+                        fallback_exc,
+                        exc_info=True,
+                    )
+                    await emit_response(
+                        ctx,
+                        self.id,
+                        "I encountered an issue refining that information. "
+                        "Please try again.",
+                    )
+                    return
+            else:
+                logger.error(
+                    "CertificationInfo revision agent call failed: %s",
+                    exc,
+                    exc_info=True,
+                )
+                await emit_response(
+                    ctx,
+                    self.id,
+                    "I encountered an issue refining that information. "
+                    "Please try again.",
+                )
+                return
         result_text = extract_response_text(
             response,
             fallback="I could not retrieve certification information.",
@@ -220,4 +290,41 @@ class CertificationInfoExecutor(Executor):
         return extract_response_text(
             response,
             fallback="I could not retrieve certification information.",
+        )
+
+    async def _fetch_cert_info_general(
+        self,
+        decision: RoutingDecision,
+    ) -> str:
+        """
+        Call the fallback agent (no MCP) for general-knowledge cert info.
+
+        Used when ``learn.microsoft.com/api/mcp`` is unavailable.  The
+        fallback agent responds from training knowledge and is instructed
+        to prepend a prominent unavailability disclaimer.
+
+        Parameters:
+            decision (RoutingDecision): Original routing decision.
+
+        Returns:
+            str: General-knowledge certification information text with
+            a Microsoft Learn unavailability disclaimer.
+        """
+        cert = decision.certification or "the requested certification"
+        prompt = (
+            f"{decision.task}\n\n"
+            f"Certification: {cert}\n"
+            f"Additional context: {decision.context}"
+        )
+        messages = [ChatMessage(role=Role.USER, text=prompt)]
+        logger.info("CertificationInfo fallback (no MCP) for: %s", cert)
+        response = await safe_agent_run(self.cert_info_fallback_agent, messages)
+        return extract_response_text(
+            response,
+            fallback=(
+                "\u26a0\ufe0f **Microsoft Learn is temporarily unavailable.**"
+                " I was unable to retrieve certification information right "
+                "now. Please try again later or visit "
+                "https://learn.microsoft.com directly."
+            ),
         )

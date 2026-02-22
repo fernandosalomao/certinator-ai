@@ -33,8 +33,42 @@ from executors.models import (
     RoutingDecision,
     StudyPlanFromQuizRequest,
 )
+from tools.mcp import is_mcp_error
 
 logger = logging.getLogger(__name__)
+
+# ---------------------------------------------------------------------------
+# MCP unavailability fallback message
+# ---------------------------------------------------------------------------
+
+_MCP_UNAVAILABLE_STUDY_PLAN_TEMPLATE = (
+    "\u26a0\ufe0f **Microsoft Learn is temporarily unavailable.** "
+    "I\u2019m unable to fetch live exam topics and learning paths for "
+    "**{cert}** right now.\n\n"
+    "While the service is down, you can:\n"
+    "- Browse this certification at "
+    "[Microsoft Learn Certifications]("
+    "https://learn.microsoft.com/en-us/certifications/)\n"
+    "- Search for **{cert}** training on "
+    "[learn.microsoft.com/training]("
+    "https://learn.microsoft.com/en-us/training/)\n\n"
+    "Please try again shortly \u2014 I\u2019ll generate a personalised "
+    "study plan with live Microsoft Learn data once the service is "
+    "restored."
+)
+
+
+def _mcp_unavailable_msg(cert: str) -> str:
+    """
+    Return a user-facing message for when MS Learn MCP is unavailable.
+
+    Parameters:
+        cert (str): Certification code or display name.
+
+    Returns:
+        str: Formatted unavailability message with actionable suggestions.
+    """
+    return _MCP_UNAVAILABLE_STUDY_PLAN_TEMPLATE.format(cert=cert)
 
 
 class LearningPathFetcherExecutor(Executor):
@@ -115,17 +149,33 @@ class LearningPathFetcherExecutor(Executor):
                 1,
                 {"executor": "learning-path-fetcher", "status": "error"},
             )
-            logger.error(
-                "LearningPathFetcher agent call failed for %s: %s",
-                cert,
-                exc,
-                exc_info=True,
-            )
-            await emit_response(
-                ctx,
-                self.id,
-                "I encountered an issue retrieving that information. Please try again.",
-            )
+            if is_mcp_error(exc):
+                metrics.mcp_unavailable_events.add(
+                    1,
+                    {
+                        "executor": "learning-path-fetcher",
+                        "degraded": "false",
+                    },
+                )
+                logger.warning(
+                    "LearningPathFetcher MCP unavailable for %s: %s",
+                    cert,
+                    exc,
+                )
+                await emit_response(ctx, self.id, _mcp_unavailable_msg(cert))
+            else:
+                logger.error(
+                    "LearningPathFetcher agent call failed for %s: %s",
+                    cert,
+                    exc,
+                    exc_info=True,
+                )
+                await emit_response(
+                    ctx,
+                    self.id,
+                    "I encountered an issue retrieving that information. "
+                    "Please try again.",
+                )
             return
 
         topics = self._extract_topics(response, cert)
@@ -202,17 +252,33 @@ class LearningPathFetcherExecutor(Executor):
                 1,
                 {"executor": "learning-path-fetcher", "status": "error"},
             )
-            logger.error(
-                "LearningPathFetcher agent call failed for post-quiz plan (%s): %s",
-                cert,
-                exc,
-                exc_info=True,
-            )
-            await emit_response(
-                ctx,
-                self.id,
-                "I encountered an issue retrieving that information. Please try again.",
-            )
+            if is_mcp_error(exc):
+                metrics.mcp_unavailable_events.add(
+                    1,
+                    {
+                        "executor": "learning-path-fetcher",
+                        "degraded": "false",
+                    },
+                )
+                logger.warning(
+                    "LearningPathFetcher MCP unavailable for post-quiz plan (%s): %s",
+                    cert,
+                    exc,
+                )
+                await emit_response(ctx, self.id, _mcp_unavailable_msg(cert))
+            else:
+                logger.error(
+                    "LearningPathFetcher agent call failed for post-quiz plan (%s): %s",
+                    cert,
+                    exc,
+                    exc_info=True,
+                )
+                await emit_response(
+                    ctx,
+                    self.id,
+                    "I encountered an issue retrieving that information. "
+                    "Please try again.",
+                )
             return
 
         topics = self._extract_topics(response, cert)

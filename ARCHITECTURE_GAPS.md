@@ -24,7 +24,7 @@ This document identifies gaps between the current implementation and the [requir
 | G4 | [Missing custom OTel metrics for quality signals](#g4-missing-custom-otel-metrics-for-quality-signals) | Evaluations & Telemetry | **High** | Low | ✅ Implemented |
 | G5 | [No input validation / prompt injection protection](#g5-no-input-validation--prompt-injection-protection) | Responsible AI | **High** | Medium | ❌ Missing |
 | G6 | [No routing accuracy evaluation dataset](#g6-no-routing-accuracy-evaluation-dataset) | Evaluations & Telemetry | **High** | Medium | ❌ Missing |
-| G7 | [No MCP fallback on unavailability](#g7-no-mcp-fallback-on-unavailability) | Reliability & Safety | **High** | Medium | ❌ Missing |
+| G7 | [No MCP fallback on unavailability](#g7-no-mcp-fallback-on-unavailability) | Reliability & Safety | **High** | Medium | ✅ Implemented |
 | G8 | [Reasoning traces not visible to user](#g8-reasoning-traces-not-visible-to-user) | Reasoning & Multi-step Thinking | **Medium-High** | Medium | ❌ Missing |
 | G9 | [No output content safety filtering](#g9-no-output-content-safety-filtering) | Responsible AI | **Medium** | Medium | ❌ Missing |
 | G10 | [Frontend lacks error handling](#g10-frontend-lacks-error-handling) | User Experience | **Medium** | Low | ❌ Missing |
@@ -350,5 +350,5 @@ useCopilotChatSuggestions({
 |----------|-----|
 | ✅ Structured output with fallback parsing | ❌ G1: No error boundaries on agent calls |
 | ✅ Auto-approve with disclaimer at iteration cap | ❌ G5: No prompt injection protection |
-| ✅ Deterministic tools for critical calculations | ❌ G7: No MCP fallback on downtime |
+| ✅ Deterministic tools for critical calculations | ✅ G7: MCP fallback with general-knowledge degradation |
 | ✅ Bounded critic loop prevents infinite revision | ❌ G9: No output content safety filtering |
