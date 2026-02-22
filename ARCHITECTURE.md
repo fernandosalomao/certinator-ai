@@ -4,6 +4,21 @@ Multi-agent workflow system for Microsoft certification exam preparation, built 
 
 ---
 
+## Table of Contents
+
+- [High-Level Overview](#high-level-overview)
+- [Workflow Graph Topology](#workflow-graph-topology)
+- [Layer Architecture](#layer-architecture)
+- [Reasoning Patterns](#reasoning-patterns)
+- [HITL (Human-in-the-Loop) Pattern](#hitl-human-in-the-loop-pattern)
+- [Critic Validation Loop](#critic-validation-loop)
+- [Evaluations & Telemetry](#evaluations--telemetry)
+- [Responsible AI](#responsible-ai)
+- [File Structure](#file-structure)
+- [Design Principles](#design-principles)
+
+---
+
 ## High-Level Overview
 
 ```
@@ -18,7 +33,7 @@ Multi-agent workflow system for Microsoft certification exam preparation, built 
 │  Backend (Python — Agent Framework)                              │
 │                                                                  │
 │    app.py  →  workflow.py  →  WorkflowBuilder graph              │
-│             (6 agents, 7 executors, graph-based routing)         │
+│             (6 agents, 8 executors, graph-based routing)         │
 │                                                                  │
 │    Run modes: HTTP server (default) │ AG-UI │ CLI                │
 └──────────────────────────────────────────────────────────────────┘
@@ -27,42 +42,119 @@ Multi-agent workflow system for Microsoft certification exam preparation, built 
                    Microsoft Learn MCP (docs)
 ```
 
+```mermaid
+graph TB
+    subgraph Frontend["Frontend (Next.js + CopilotKit)"]
+        UI[CopilotChat + Components]
+        API["/api/copilotkit (HttpAgent)"]
+        UI --> API
+    end
+
+    subgraph Backend["Backend (Python — Agent Framework)"]
+        APP[app.py — Entrypoint]
+        WF[workflow.py — WorkflowBuilder Graph]
+        subgraph Agents["6 AI Agents"]
+            COORD_A[Coordinator<br/>gpt-4.1-mini]
+            CERT_A[CertInfo<br/>gpt-4.1 + MCP]
+            LPF_A[LearningPathFetcher<br/>gpt-4.1 + MCP]
+            SP_A[StudyPlan<br/>gpt-4.1 + schedule tool]
+            PQ_A[Practice<br/>gpt-4.1]
+            CRITIC_A[Critic<br/>gpt-4.1-mini]
+        end
+        subgraph Executors["8 Workflow Executors"]
+            COORD_E[CoordinatorRouter]
+            CERT_E[CertInfoHandler]
+            LPF_E[LearningPathFetcherHandler]
+            SP_E[StudyPlanSchedulerHandler]
+            PQ_E[PracticeQuizOrchestrator]
+            CRITIC_E[CriticExecutor]
+            PSP_E[PostStudyPlanHandler]
+            GEN_E[GeneralHandler]
+        end
+        APP --> WF
+    end
+
+    subgraph External["External Services"]
+        FOUNDRY[Azure AI Foundry<br/>LLM Endpoints]
+        MCP[Microsoft Learn MCP<br/>learn.microsoft.com/api/mcp]
+    end
+
+    API -- "AG-UI Protocol" --> APP
+    Agents --> FOUNDRY
+    CERT_A --> MCP
+    LPF_A --> MCP
+```
+
 ---
 
 ## Workflow Graph Topology
 
 The workflow is a directed graph built with `WorkflowBuilder`. The **CoordinatorRouter** is the start node; it classifies user intent and emits a typed `RoutingDecision` that switch-case edges route to specialist handlers.
 
-```
-CoordinatorRouter (start)
-    │
-    └── switch-case on RoutingDecision.route
-          │
-          ├── "cert_info"  → CertInfoHandler ──► CriticExecutor
-          │                                       ├── PASS → emit to user
-          │                                       └── FAIL → RevisionRequest → CertInfoHandler (loop)
-          │
-          ├── "study_plan" → LearningPathFetcherHandler
-          │                        │ (LearningPathsData)
-          │                        ▼
-          │                  StudyPlanSchedulerHandler ──► CriticExecutor
-          │                                                ├── PASS → PostStudyPlanHandler
-          │                                                │             ├── HITL YES → PracticeQuizOrchestrator
-          │                                                │             └── HITL NO  → end
-          │                                                └── FAIL → RevisionRequest → StudyPlanScheduler (loop)
-          │
-          ├── "practice"   → PracticeQuizOrchestrator (HITL quiz loop)
-          │                        ├── PASS (≥70%)  → congratulations + exam link
-          │                        └── FAIL (<70%)  → HITL study plan offer
-          │                              ├── YES → StudyPlanFromQuizRequest → LearningPathFetcher pipeline
-          │                              └── NO  → end
-          │
-          └── default      → GeneralHandler (echo coordinator response)
+### MAF-Generated Workflow Diagram
+
+![Workflow Graph](workflow.svg)
+
+### Detailed Routing Diagram
+
+```mermaid
+flowchart TD
+    START([User Message]) --> COORD[CoordinatorRouter<br/>gpt-4.1-mini]
+
+    COORD -- "route = cert_info" --> CERT[CertInfoHandler<br/>gpt-4.1 + MCP]
+    COORD -- "route = study_plan" --> LPF[LearningPathFetcherHandler<br/>gpt-4.1 + MCP]
+    COORD -- "route = practice" --> PQ[PracticeQuizOrchestrator<br/>gpt-4.1]
+    COORD -- "route = general" --> GEN[GeneralHandler]
+
+    CERT --> CRITIC{CriticExecutor<br/>gpt-4.1-mini}
+    CRITIC -- "PASS" --> EMIT_CERT([Emit to User])
+    CRITIC -- "FAIL ≤2x" --> REV_CERT[RevisionRequest] --> CERT
+
+    LPF -- "LearningPathsData" --> SP[StudyPlanSchedulerHandler<br/>gpt-4.1 + schedule tool]
+    SP --> CRITIC
+    CRITIC -- "PASS study_plan" --> PSP[PostStudyPlanHandler]
+    CRITIC -- "FAIL ≤2x" --> REV_SP[RevisionRequest] --> SP
+
+    PSP -- "Emit study plan" --> HITL_PRACTICE{HITL: Want practice?}
+    HITL_PRACTICE -- "YES" --> PQ
+    HITL_PRACTICE -- "NO" --> END_SP([End])
+
+    PQ -- "Generate & present questions" --> HITL_QUIZ{HITL: Quiz Session}
+    HITL_QUIZ -- "Answers submitted" --> SCORE[Score Quiz<br/>deterministic]
+    SCORE -- "≥70% PASS" --> CONGRATS([Congratulations + Exam Link])
+    SCORE -- "<70% FAIL" --> HITL_PLAN{HITL: Want study plan?}
+    HITL_PLAN -- "YES" --> LPF_QUIZ[StudyPlanFromQuizRequest] --> LPF
+    HITL_PLAN -- "NO" --> END_QUIZ([End])
+
+    GEN --> EMIT_GEN([Emit to User])
+
+    style CRITIC fill:#f9d71c,stroke:#333,color:#333
+    style HITL_QUIZ fill:#4ecdc4,stroke:#333,color:#333
+    style HITL_PRACTICE fill:#4ecdc4,stroke:#333,color:#333
+    style HITL_PLAN fill:#4ecdc4,stroke:#333,color:#333
+    style SCORE fill:#95e1d3,stroke:#333,color:#333
 ```
 
 ### Cross-Route Flows
 
 The architecture supports **bidirectional routing** between study plan and practice features:
+
+```mermaid
+flowchart LR
+    subgraph "Study Plan Pipeline"
+        LPF1[LearningPathFetcher] --> SP1[StudyPlanScheduler] --> C1[Critic] --> PSP1[PostStudyPlanHandler]
+    end
+
+    subgraph "Practice Pipeline"
+        PQ1[PracticeQuizOrchestrator] --> SCORE1[Score]
+    end
+
+    PSP1 -- "HITL YES → RoutingDecision<br/>(practice-questions)" --> PQ1
+    SCORE1 -- "FAIL + HITL YES →<br/>StudyPlanFromQuizRequest<br/>(weak topics only)" --> LPF1
+
+    style PSP1 fill:#4ecdc4,stroke:#333,color:#333
+    style SCORE1 fill:#95e1d3,stroke:#333,color:#333
+```
 
 - **Practice → Study Plan**: When a student fails a quiz and accepts the study plan offer, a `StudyPlanFromQuizRequest` routes to the `LearningPathFetcherHandler`, entering the full study plan pipeline with topic data scoped to weak areas.
 - **Study Plan → Practice**: After a study plan passes critic review, `PostStudyPlanHandler` asks via HITL if the student wants practice questions. On acceptance, a `RoutingDecision` routes to `PracticeQuizOrchestrator`.
@@ -312,3 +404,141 @@ frontend/
 5. **Critic gate**: Specialist outputs pass through quality validation before reaching the user, with bounded revision loops.
 6. **HITL for decisions**: Workflow pauses for meaningful student choices (answers, study plan acceptance) using the MAF `request_info`/`response_handler` pattern.
 7. **Reusable agents**: The same agent instance (e.g., `learning_path_agent`) can be shared across multiple executors that need topic data.
+
+---
+
+## Reasoning Patterns
+
+The system implements several well-established reasoning patterns to improve robustness, transparency, and quality of outputs.
+
+### 1. Planner–Executor Pattern
+
+The **Coordinator** (gpt-4.1-mini) acts as the planner — classifying user intent via structured output (`CoordinatorResponse`) and emitting a `RoutingDecision`. Specialist executors act as executors that carry out domain-specific tasks. The routing is **deterministic** once the Coordinator emits its decision — the `WorkflowBuilder` graph topology handles all downstream orchestration.
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant Coordinator as Coordinator<br/>(Planner)
+    participant Graph as WorkflowBuilder<br/>(Router)
+    participant Specialist as Specialist<br/>(Executor)
+    participant Critic as Critic<br/>(Verifier)
+
+    User->>Coordinator: "Create a study plan for AZ-104"
+    Coordinator->>Coordinator: Classify intent (structured output)
+    Coordinator->>Graph: RoutingDecision(route="study-plan-generator")
+    Graph->>Specialist: Switch-case dispatch
+    Specialist->>Specialist: Fetch data, compute schedule, format
+    Specialist->>Critic: SpecialistOutput
+    Critic->>Critic: Validate quality
+    alt PASS
+        Critic-->>User: Emit approved content
+    else FAIL (≤2 iterations)
+        Critic->>Specialist: RevisionRequest
+        Specialist->>Critic: Revised SpecialistOutput
+    end
+```
+
+**Design choice**: The Coordinator uses `gpt-4.1-mini` because routing is a classification task that doesn't need a large model. Specialists use `gpt-4.1` where generation capability matters.
+
+### 2. Critic / Verifier Pattern
+
+A shared `CriticExecutor` validates all specialist outputs (except practice quizzes, which use deterministic scoring) before they reach the user:
+
+- **Structured verdict**: The Critic agent outputs `CriticVerdictResponse` with `PASS`/`FAIL`, confidence score, identified issues, and improvement suggestions.
+- **Bounded iteration**: Maximum **2 revision attempts**, then auto-approves with a visible disclaimer. This prevents infinite token-burning loops.
+- **Content-type routing**: Study plans receive special handling — approved plans route to `PostStudyPlanHandler` for the HITL practice offer, while other content emits directly to the user.
+
+### 3. Self-Reflection & Iteration
+
+The **critic revision loop** implements self-reflection: when content fails validation, the Critic provides detailed feedback that the specialist uses to revise its output. The revision request carries:
+
+- `previous_content` — what was rejected
+- `feedback[]` — specific issues identified
+- `iteration` counter — so the specialist knows how many attempts remain
+
+### 4. Role-Based Specialization
+
+Each of the 6 agents has a distinct instruction set, model, and tool set — there is no overlap in responsibilities:
+
+| Agent | Role | Model | Tools | Why Separate |
+|-------|------|-------|-------|-------------|
+| **Coordinator** | Intent classification | gpt-4.1-mini | — | Routing is cheap classification; doesn't need a powerful model |
+| **CertInfo** | Info retrieval | gpt-4.1 | MCP | Needs MCP tool and detailed retrieval instructions |
+| **LearningPathFetcher** | Structured extraction | gpt-4.1 | MCP | Schema-constrained output contract differs from CertInfo |
+| **StudyPlan** | Formatting | gpt-4.1 | schedule | Math offloaded to tool; LLM does prose only |
+| **Practice** | Dual-mode generation | gpt-4.1 | — | Question gen and feedback reports are distinct prompts |
+| **Critic** | Validation | gpt-4.1-mini | — | Review is less demanding than generation |
+
+### 5. Deterministic Computation
+
+Critical calculations are **never delegated to LLMs** — they use deterministic Python functions:
+
+| Computation | Tool | Description |
+|-------------|------|-------------|
+| Quiz scoring | `score_quiz()` | Overall %, per-topic breakdown, weak topic identification |
+| Study scheduling | `schedule_study_plan()` | Week-by-week schedule from topics, hours/week, duration |
+
+The `StudyPlanGeneratorExecutor` calls `schedule_study_plan()` **directly as Python** (not via agent tool call) to guarantee arithmetic correctness, then sends the computed schedule to the LLM purely for Markdown formatting. If the LLM returns JSON instead of prose, a deterministic Markdown renderer acts as a fallback.
+
+---
+
+## Evaluations & Telemetry
+
+### Current Observability
+
+| Layer | Technology | Description |
+|-------|-----------|-------------|
+| **Distributed tracing** | OpenTelemetry (gRPC port 4317) | Sends traces to AI Toolkit trace viewer in VS Code via `configure_otel_providers()` |
+| **Workflow visualization** | `WorkflowViz` | Generates Mermaid diagrams, DiGraph, and SVG exports of the workflow graph on build |
+| **Workflow progress** | Synthetic state snapshots | Real-time step-by-step progress sent to frontend via `update_workflow_progress` |
+
+### Evaluation Strategy
+
+#### Offline Evaluations (CI/CD)
+
+| Evaluation | Metric | Method |
+|------------|--------|--------|
+| **Routing accuracy** | % correct routes | Labeled dataset (~100 queries) run against Coordinator in isolation |
+| **CertInfo completeness** | Rubric score (0-5) | Azure AI Evaluation `RelevanceEvaluator` against known-good outputs |
+| **StudyPlan feasibility** | Hours add up, weeks ≤ deadline, all topics covered | Deterministic assertions on `schedule_study_plan()` output |
+| **Practice question quality** | Answer-key accuracy, topic coverage, difficulty distribution | `SimilarityEvaluator` against reference question sets |
+| **Critic effectiveness** | False positive/negative rates | Known-good + known-bad outputs, measured verdict accuracy |
+
+#### Online Telemetry (Production)
+
+| Metric | How to Capture |
+|--------|---------------|
+| Critic revision rate | Custom OTel metrics on PASS/FAIL verdicts |
+| HITL acceptance rate | Log accept/reject ratios for offers |
+| Quiz completion rate | Starts vs. completions |
+| Token usage per route | Per-agent token count spans |
+| MCP latency & failure rate | Dedicated spans with success/failure status |
+
+---
+
+## Responsible AI
+
+### Implemented Guardrails
+
+| Guardrail | Description |
+|-----------|-------------|
+| **Critic validation** | All specialist outputs reviewed for quality before delivery |
+| **Structured output** | `response_format` prevents free-form hallucination in routing and validation |
+| **Deterministic scoring** | LLMs never perform arithmetic — Python functions handle all calculations |
+| **MCP-first instructions** | Agents instructed to always use MCP, never answer from memory alone |
+| **Auto-approve disclaimer** | When critic loop reaches iteration cap, content is delivered with a transparent disclaimer about verification needs |
+| **Bounded revision loops** | Maximum 2 critic iterations prevents infinite token consumption |
+
+### Additional Considerations
+
+| Area | Approach |
+|------|----------|
+| **Input validation** | Azure AI Prompt Shields for jailbreak/prompt injection detection at the Coordinator entry point |
+| **Output content safety** | Azure AI Content Safety for text analysis (hate, self-harm, sexual, violence categories) |
+| **PII protection** | Detection and redaction on user input before logging to traces |
+| **Groundedness** | `GroundednessEvaluator` to verify CertInfo output is grounded in MCP search results |
+| **Rate limiting** | Per-session rate limiting at the FastAPI layer |
+| **MCP fallback** | Graceful degradation with disclaimer when Microsoft Learn MCP is unavailable |
+| **Transparency** | Citation tracking — preserve source URLs from MCP tool calls in final output |
+
+---

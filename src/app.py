@@ -139,6 +139,16 @@ class RequestInfoOrchestrator(Orchestrator):
 
     # ── helpers ────────────────────────────────────────────────────
 
+    # Names of synthetic predict-state tools injected by AG-UI that must
+    # never be forwarded to the LLM as conversation history.
+    _PREDICT_STATE_TOOL_NAMES: frozenset[str] = frozenset(
+        {
+            "update_workflow_progress",
+            "update_active_quiz_state",
+            "update_post_study_plan_context",
+        }
+    )
+
     @staticmethod
     def _find_request_info_call_ids(
         raw_messages: list[dict],
@@ -151,6 +161,34 @@ class RequestInfoOrchestrator(Orchestrator):
             for tc in msg.get("tool_calls") or msg.get("toolCalls") or []:
                 fn = tc.get("function") or {}
                 if fn.get("name") == "request_info":
+                    tc_id = tc.get("id", "")
+                    if tc_id:
+                        ids.add(tc_id)
+        return ids
+
+    @classmethod
+    def _find_predict_state_call_ids(
+        cls,
+        raw_messages: list[dict],
+    ) -> set[str]:
+        """Collect tool-call IDs for predict-state synthetic tools.
+
+        These are tools like ``update_workflow_progress`` that are
+        injected by the AG-UI bridge for shared-state updates.  They
+        must be stripped from conversation history before the messages
+        are forwarded to the LLM, otherwise
+        ``_prepare_messages_for_openai`` raises a ``KeyError`` because
+        the matching ``FunctionCallContent`` is removed by
+        ``sanitize_tool_history`` while the orphaned tool-result is
+        kept.
+        """
+        ids: set[str] = set()
+        for msg in raw_messages:
+            if msg.get("role") != "assistant":
+                continue
+            for tc in msg.get("tool_calls") or msg.get("toolCalls") or []:
+                fn = tc.get("function") or {}
+                if fn.get("name") in cls._PREDICT_STATE_TOOL_NAMES:
                     tc_id = tc.get("id", "")
                     if tc_id:
                         ids.add(tc_id)
@@ -360,16 +398,21 @@ class RequestInfoOrchestrator(Orchestrator):
         self,
         context: ExecutionContext,
     ) -> AsyncGenerator[BaseEvent, None]:
-        """Strip stale request_info artifacts, then delegate."""
+        """Strip stale request_info and predict-state artifacts, then delegate."""
         raw = context.input_data.get("messages", [])
         ri_ids = self._find_request_info_call_ids(raw)
+        ps_ids = self._find_predict_state_call_ids(raw)
+        all_ids = ri_ids | ps_ids
 
-        if ri_ids:
-            cleaned = self._strip_request_info_artifacts(raw, ri_ids)
+        if all_ids:
+            cleaned = self._strip_request_info_artifacts(raw, all_ids)
             logger.info(
                 "RequestInfoOrchestrator[cleanup]: stripped "
-                "%d request_info artifacts (%d→%d messages)",
+                "%d artifact(s) (request_info=%d, predict_state=%d) "
+                "(%d→%d messages)",
+                len(all_ids),
                 len(ri_ids),
+                len(ps_ids),
                 len(raw),
                 len(cleaned),
             )
@@ -440,7 +483,7 @@ async def run_agui() -> None:
 
 
 # ---------------------------------------------------------------------------
-# CLI Mode
+# CLI Mode (This will be removed later)
 # ---------------------------------------------------------------------------
 
 
@@ -477,7 +520,7 @@ async def run_cli():
 
 
 # ---------------------------------------------------------------------------
-# HTTP Server Mode (default)
+# HTTP Server Mode (This will be removed later)
 # ---------------------------------------------------------------------------
 
 

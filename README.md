@@ -53,27 +53,30 @@ AZURE_AI_MODEL_DEPLOYMENT_NAME=gpt-4.1
 
 ## 🚀 Running the Application
 
-### HTTP Server (Agent Inspector)
+### Backend
 
 ```bash
 python src/app.py
+
 ```
 
-### CLI (Single-turn chat agent mode)
+### Frontend
 
 ```bash
-python src/app.py --cli
+cd frontend
+pnpm dev
 ```
 
 ### What You Get
 
-The app runs a **complete multi-agent workflow** orchestrating 5 specialized agents:
+The app runs a **complete multi-agent workflow** orchestrating 6 specialized agents:
 
-1. **Coordinator** — Routes your query to the right specialist
-2. **CertInfo** — Retrieves certification details (uses Microsoft Learn MCP)
-3. **StudyPlan** — Generates personalized study schedules
-4. **Practice** — Creates practice questions with feedback
-5. **Critic** — Reviews specialist outputs for quality (accuracy, completeness, safety)
+1. **CoordinatorAgent** — Routes your query to the right specialist
+2. **CertificationInfoAgent** — Retrieves certification details
+3. **LearningPathFetcherAgent** — Retrieves learning paths for certifications
+4. **StudyPlanGeneratorAgent** — Generates personalized study schedules
+5. **PracticeQuestionsAgent** — Creates practice questions with feedback
+6. **CriticAgent** — Reviews specialist outputs for quality (accuracy, completeness, safety)
 
 ### Example Queries to Try
 

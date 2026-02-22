@@ -16,11 +16,10 @@ The main features of Certinator AI include:
   - Recent changes to the exam syllabus
   - Price and registration details
 
-- **Study Plan Generation**: Based on the retrieved certification information and student schedule, the system can generate a personalized study plan that includes:
+- **Study Plan Generation**: Based on the student schedule, the system can generate a personalized study plan that includes:
   - Recommended learning resources (e.g., Microsoft Learn modules, documentation, online courses)
   - Suggested study schedule leading up to the exam date
   - Tips for effective exam preparation
-  - iCal export of the study schedule
 
 - **Practice Question Generation**: The system can generate practice questions based on the exam syllabus, including:
   - Multiple-choice questions
