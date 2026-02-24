@@ -101,10 +101,10 @@ class CoordinatorExecutor(Executor):
             "general": 2,
         }
         route_messages = {
-            "certification-info": "Routing to certification information specialist...",
-            "study-plan-generator": "Routing to study plan workflow...",
-            "practice-questions": "Routing to practice workflow...",
-            "general": "Preparing a direct answer...",
+            "certification-info": "Coordinator: Routing to certification information specialist...",
+            "study-plan-generator": "Coordinator: Routing to study plan workflow...",
+            "practice-questions": "Coordinator: Routing to practice workflow...",
+            "general": "Coordinator: Preparing a direct answer...",
         }
         route = decision.route if decision.route in route_totals else "general"
 
@@ -129,7 +129,9 @@ class CoordinatorExecutor(Executor):
             ctx=ctx,
             route=route,
             active_executor=self.id,
-            message=route_messages.get(route, "Routing your request..."),
+            message=route_messages.get(
+                route, "Coordinator Agent: Routing your request..."
+            ),
             current_step=1,
             total_steps=route_totals.get(route, 2),
             reasoning=reasoning,

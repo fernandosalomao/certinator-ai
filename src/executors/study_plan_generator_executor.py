@@ -92,7 +92,7 @@ class StudyPlanGeneratorExecutor(Executor):
             ctx=ctx,
             route="study-plan-generator",
             active_executor=self.id,
-            message="Building a week-by-week study schedule...",
+            message="Study Plan Agent: Building a week-by-week study schedule...",
             current_step=3,
             total_steps=5,
         )
@@ -137,7 +137,7 @@ class StudyPlanGeneratorExecutor(Executor):
             ctx=ctx,
             route="study-plan-generator",
             active_executor=self.id,
-            message="Refining the study schedule based on quality review...",
+            message="Study Plan Agent: Refining the study schedule based on quality review...",
             current_step=3,
             total_steps=5,
         )

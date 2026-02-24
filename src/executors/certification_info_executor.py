@@ -86,7 +86,7 @@ class CertificationInfoExecutor(Executor):
             ctx=ctx,
             route="certification-info",
             active_executor=self.id,
-            message="Retrieving certification details from Microsoft Learn...",
+            message="Certification Agent: Retrieving certification details from Microsoft Learn...",
             current_step=2,
             total_steps=3,
         )
@@ -169,7 +169,7 @@ class CertificationInfoExecutor(Executor):
             ctx=ctx,
             route="certification-info",
             active_executor=self.id,
-            message="Refining certification details based on quality review...",
+            message="Certification Agent: Refining certification details based on quality review...",
             current_step=2,
             total_steps=3,
         )

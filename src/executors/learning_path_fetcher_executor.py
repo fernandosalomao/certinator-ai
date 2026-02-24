@@ -119,7 +119,7 @@ class LearningPathFetcherExecutor(Executor):
             ctx=ctx,
             route="study-plan-generator",
             active_executor=self.id,
-            message="Fetching official Microsoft Learn topics and paths...",
+            message="Learning Path Fetcher Agent: Fetching official Microsoft Learn topics and paths...",
             current_step=2,
             total_steps=5,
         )
@@ -214,7 +214,7 @@ class LearningPathFetcherExecutor(Executor):
             ctx=ctx,
             route="study-plan-generator",
             active_executor=self.id,
-            message="Fetching focused learning paths for weak quiz topics...",
+            message="Learning Path Fetcher Agent: Fetching focused learning paths for weak quiz topics...",
             current_step=2,
             total_steps=5,
         )
