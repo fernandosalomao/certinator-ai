@@ -9,12 +9,13 @@
  */
 
 import { useEffect, useRef, useState } from "react";
-import { useCopilotChatInternal } from "@copilotkit/react-core";
+import { useAgent } from "@copilotkit/react-core/v2";
 
 const SLOW_THRESHOLD_MS = 30_000;
 
 export default function SlowRunIndicator() {
-  const { isLoading } = useCopilotChatInternal();
+  const { agent } = useAgent({ agentId: "my_agent" });
+  const isLoading = agent.isRunning;
   const [isSlow, setIsSlow] = useState(false);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 

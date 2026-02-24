@@ -15,13 +15,11 @@ Usage:
 
 import asyncio
 import logging
-import sys
 from collections.abc import AsyncGenerator
 from typing import Any
 
 from ag_ui.core import BaseEvent
 from agent_framework import (
-    ChatMessage,
     FunctionResultContent,
     Role,
 )
@@ -43,8 +41,6 @@ from opentelemetry.sdk.metrics.export import (
     ConsoleMetricExporter,
     PeriodicExportingMetricReader,
 )
-
-from executors import extract_message_text
 
 # Configure logging so our debug output is visible
 logging.basicConfig(
@@ -96,12 +92,7 @@ load_dotenv(override=True)
 # ---------------------------------------------------------------------------
 # OpenTelemetry Tracing
 # ---------------------------------------------------------------------------
-# Sends traces to AI Toolkit trace viewer via gRPC on localhost:4317.
-# Start the collector in VS Code: AI Toolkit > Tracing > Open.
-configure_otel_providers(
-    vs_code_extension_port=4317,  # AI Toolkit gRPC port
-    enable_sensitive_data=True,  # Capture prompts and completions
-)
+configure_otel_providers()
 
 # ---------------------------------------------------------------------------
 # OpenTelemetry Metrics
@@ -114,20 +105,13 @@ configure_otel_providers(
 #   1. OTLPMetricExporter → same gRPC collector on port 4317 that receives
 #      traces.  Metrics appear in any OTLP-compatible backend (e.g. the AI
 #      Toolkit collector, piped to Prometheus/Grafana).
-#   2. ConsoleMetricExporter → prints a snapshot to stdout every 60 s so
-#      you can verify signals locally without any extra infrastructure.
-#      Remove or disable in production.
-_metric_readers = [
-    PeriodicExportingMetricReader(
-        OTLPMetricExporter(endpoint="http://localhost:4317", insecure=True),
-        export_interval_millis=60_000,  # flush every 60 s
-    ),
-    PeriodicExportingMetricReader(
-        ConsoleMetricExporter(),
-        export_interval_millis=60_000,  # print snapshot every 60 s
-    ),
-]
-otel_metrics.set_meter_provider(MeterProvider(metric_readers=_metric_readers))
+# _metric_readers = [
+#     PeriodicExportingMetricReader(
+#         OTLPMetricExporter(endpoint="http://localhost:4317", insecure=True),
+#         export_interval_millis=60_000,  # flush every 60 s
+#     )
+# ]
+# otel_metrics.set_meter_provider(MeterProvider(metric_readers=_metric_readers))
 
 
 # ---------------------------------------------------------------------------
@@ -141,7 +125,7 @@ otel_metrics.set_meter_provider(MeterProvider(metric_readers=_metric_readers))
 #
 # This orchestrator is placed **first** in the chain so that, when
 # ``pending_requests`` exist, it converts only the ``role: tool``
-# raw AG-UI messages to ``ChatMessage`` objects and passes them
+# raw AG-UI messages to ``FunctionResultContent``-carrying objects and
 # **directly** to ``WorkflowAgent.run_stream()``, completely
 # bypassing ``DefaultOrchestrator`` whose ``sanitize_tool_history``
 # would drop orphan tool results that lack a preceding assistant
@@ -464,14 +448,14 @@ class RequestInfoOrchestrator(Orchestrator):
 
 
 # ---------------------------------------------------------------------------
-# AG_UI
+# AG-UI Server
 # ---------------------------------------------------------------------------
 async def run_agui() -> None:
-    """
-    Run the AG_UI dashboard for visualizing agent interactions.
+    """Start the AG-UI FastAPI server.
 
-    This starts a FastAPI app with the Agent Framework endpoint and serves
-    it with Uvicorn using the current asyncio event loop.
+    Builds the MAF workflow, wraps it in an ``AgentFrameworkAgent``
+    with the custom orchestrator chain, and serves it on port 8000
+    via Uvicorn.
     """
     import uvicorn
     from agent_framework.ag_ui import add_agent_framework_fastapi_endpoint
@@ -518,95 +502,13 @@ async def run_agui() -> None:
 
 
 # ---------------------------------------------------------------------------
-# CLI Mode (This will be removed later)
-# ---------------------------------------------------------------------------
-
-
-async def run_cli():
-    """
-    Run the agent in interactive CLI mode.
-
-    Starts a REPL loop that reads user input, sends it through the
-    multi-agent workflow, and prints assistant responses to stdout.
-    Type 'quit' or 'exit' to stop.
-    """
-    from workflow import build_workflow
-
-    agent, credential = await build_workflow()
-    print("Certinator AI — CLI Mode  (5 agents ready)")
-    print("Type 'quit' or 'exit' to stop.\n")
-
-    messages: list[ChatMessage] = []
-    try:
-        while True:
-            user_input = input("You: ")
-            if user_input.strip().lower() in ("quit", "exit"):
-                break
-
-            messages.append(ChatMessage(role=Role.USER, text=user_input))
-            response = await agent.run(messages)
-            for msg in response.messages:
-                if msg.role == Role.ASSISTANT:
-                    text = extract_message_text(msg)
-                    print(f"Certinator: {text}\n")
-                    messages.append(msg)
-    finally:
-        await credential.close()
-
-
-# ---------------------------------------------------------------------------
-# HTTP Server Mode (This will be removed later)
-# ---------------------------------------------------------------------------
-
-
-async def run_server():
-    """
-    Run the agent as an HTTP server.
-
-    Uses azure.ai.agentserver.agentframework to expose the workflow
-    agent over HTTP, compatible with AI Toolkit Agent Inspector and
-    agentdev CLI.
-    """
-    from azure.ai.agentserver.agentframework import from_agent_framework
-
-    from workflow import build_workflow
-
-    agent, credential = await build_workflow()
-
-    ag_agent = AgentFrameworkAgent(
-        agent=agent,
-        name="Certinator AI",
-        description=(
-            "Multi-agent system for Microsoft certification exam preparation."
-        ),
-        state_schema=_build_state_schema(),
-        predict_state_config=_build_predict_state_config(),
-        require_confirmation=False,
-    )
-
-    try:
-        await from_agent_framework(ag_agent).run_async()
-    finally:
-        await credential.close()
-
-
-# ---------------------------------------------------------------------------
 # Entrypoint
 # ---------------------------------------------------------------------------
 
 
 def main():
-    """
-    Parse CLI arguments and launch the appropriate mode.
-
-    Defaults to HTTP server mode. Pass --cli for interactive terminal.
-    """
-    if "--cli" in sys.argv:
-        asyncio.run(run_cli())
-    elif "--agui" in sys.argv:
-        asyncio.run(run_agui())
-    else:
-        asyncio.run(run_server())
+    """Launch the AG-UI server."""
+    asyncio.run(run_agui())
 
 
 if __name__ == "__main__":

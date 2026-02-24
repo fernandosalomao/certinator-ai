@@ -52,118 +52,118 @@ body {
   box-shadow: 0 16px 45px rgba(2, 8, 26, 0.5);
 }
 
-.embedded-chat .copilotKitWindow,
-.embedded-chat .copilotKitChat {
-  min-height: 560px;
-  border-radius: 0.9rem;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background: linear-gradient(180deg, rgba(8, 14, 31, 0.92) 0%, rgba(7, 12, 27, 0.96) 100%);
+/* ===================================================================
+   CopilotKit v2 theme — navy dark palette
+   IMPORTANT: The package's dark mode uses `.dark [data-copilotkit]`
+   (specificity 0,2,0). A plain `[data-copilotkit]` rule (0,1,0) loses.
+   We match that exact selector so our later cascade position wins.
+   =================================================================== */
+[data-copilotkit] {
+  --radius: 0.75rem;
 }
 
-.copilotKitHeader {
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-  background: rgba(10, 17, 36, 0.86);
+.dark [data-copilotkit] {
+  --background: #0d1630;
+  --foreground: #e8eeff;
+  --card: #111a36;
+  --card-foreground: #e8eeff;
+  --popover: #0d1630;
+  --popover-foreground: #e8eeff;
+  --primary: #6f87ff;
+  --primary-foreground: #ffffff;
+  --secondary: #111a36;
+  --secondary-foreground: #e8eeff;
+  --muted: #152040;
+  --muted-foreground: #9cadde;
+  --accent: #1d2a52;
+  --accent-foreground: #e8eeff;
+  --destructive: #ff4d4d;
+  --destructive-foreground: #ffffff;
+  --border: #2a355e;
+  --input: #111a36;
+  --ring: #6f87ff;
+
+  /* Make the root [data-copilotkit] element transparent so the hero-panel
+     gradient shows through. Placed here (inside the variable block we KNOW
+     compiles) rather than a separate selector to avoid Turbopack cache issues. */
+  background-color: transparent !important;
 }
 
-.copilotKitMessages {
+/* ── Custom scrollbar — blend into the dark theme ────────────────────── */
+[data-copilotkit] ::-webkit-scrollbar {
+  width: 5px;
+}
+[data-copilotkit] ::-webkit-scrollbar-track {
   background: transparent;
 }
-
-.copilotKitMessage.copilotKitAssistantMessage {
-  border: 1px solid rgba(126, 156, 255, 0.22);
-  background: rgba(113, 157, 255, 0.08);
-  color: #e8eeff;
-  padding: 1rem 1.1rem !important;
-  line-height: 1.6;
+[data-copilotkit] ::-webkit-scrollbar-thumb {
+  background: rgba(156, 173, 222, 0.15);
+  border-radius: 9999px;
+}
+[data-copilotkit] ::-webkit-scrollbar-thumb:hover {
+  background: rgba(156, 173, 222, 0.3);
+}
+/* Firefox */
+[data-copilotkit] * {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(156, 173, 222, 0.15) transparent;
 }
 
-.copilotKitMessage.copilotKitAssistantMessage .copilotKitMessageControls {
-  position: relative !important;
-  inset: auto !important;
-  display: flex;
-  align-items: center;
-  flex-wrap: nowrap;
-  gap: 0.75rem;
-  width: max-content;
-  margin-top: 0.45rem;
-  padding: 0;
-  overflow: visible;
+/* ===================================================================
+   CopilotKit v2 — Kill stray vertical/horizontal lines
+   The v2 base CSS sets `*{border-color:var(--border)}` which, combined
+   with any inherited border-width (hr, prose blockquote, internal
+   dividers), produces visible lines. We blanket-reset border-color
+   inside the CopilotKit root, then explicitly re-apply borders only
+   on the elements we style ourselves (message bubbles, input pill).
+   =================================================================== */
+.dark [data-copilotkit] *:not(.certinator-assistant-msg):not(.certinator-user-bubble):not(.quiz-card):not(.quiz-option):not(.quiz-badge) {
+  border-color: transparent !important;
 }
 
-.copilotKitMessageControls .copilotKitMessageControlButton {
-  width: 24px;
-  height: 24px;
-  min-width: 24px;
-  min-height: 24px;
-  flex: 0 0 24px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  margin: 0 !important;
-  padding: 0 !important;
+/* ===================================================================
+   CopilotKit v2 — Message bubble styling
+   Uses plain CSS marker classes injected via the v2 slot-system
+   `className` prop. These override default cpk: utility classes
+   because un-layered rules always beat @layer utilities.
+   =================================================================== */
+
+/* ── Assistant message — translucent navy panel ──────────────────── */
+.dark [data-copilotkit] .certinator-assistant-msg {
+  background: rgba(13, 21, 46, 0.6);
+  border: 1px solid rgba(42, 53, 94, 0.6) !important;
+  border-radius: 1rem;
+  padding: 1.25rem 1.25rem 0.5rem;
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.2);
 }
 
-.copilotKitMessageControls .copilotKitMessageControlButton svg {
-  width: 14px;
-  height: 14px;
-  display: block;
+/* ── User message bubble — primary-accent gradient ───────────────── */
+.dark [data-copilotkit] .certinator-user-bubble {
+  background: linear-gradient(
+    135deg,
+    rgba(40, 55, 120, 0.75),
+    rgba(25, 38, 90, 0.75)
+  ) !important;
+  border: 1px solid rgba(111, 135, 255, 0.3) !important;
+  border-radius: 18px !important;
+  box-shadow: 0 4px 6px -1px rgba(111, 135, 255, 0.1);
 }
 
-.copilotKitMessage.copilotKitUserMessage {
-  border: 1px solid rgba(66, 227, 201, 0.25);
-  background: rgba(42, 194, 173, 0.16);
-  padding: 0.75rem 0.9rem;
-  line-height: 1.5;
+/* ── Toolbar — fade in on hover ──────────────────────────────────── */
+.dark [data-copilotkit] .certinator-assistant-msg > div:last-child,
+.dark [data-copilotkit] .certinator-user-msg > div:last-child {
+  opacity: 0.4;
+  transition: opacity 0.15s ease;
 }
-
-.copilotKitMessage.copilotKitAssistantMessage p.copilotKitMarkdownElement,
-.copilotKitMessage.copilotKitUserMessage p.copilotKitMarkdownElement,
-.copilotKitMessage.copilotKitAssistantMessage p,
-.copilotKitMessage.copilotKitUserMessage p {
-  margin: 0;
-}
-
-a.copilotKitMarkdownElement,
-.copilotKitMessage.copilotKitAssistantMessage a,
-.copilotKitMessage.copilotKitUserMessage a {
-  color: #8fb1ff;
-  text-decoration: underline;
-  text-underline-offset: 2px;
-}
-
-a.copilotKitMarkdownElement:hover,
-.copilotKitMessage.copilotKitAssistantMessage a:hover,
-.copilotKitMessage.copilotKitUserMessage a:hover {
-  color: #b1c8ff;
-}
-
-.copilotKitInput {
-  border-top: 1px solid rgba(255, 255, 255, 0.1);
-  background: rgba(8, 13, 28, 0.9);
-}
-
-.copilotKitInput > textarea,
-.copilotKitInput input {
-  background: transparent;
-  color: #f3f7ff;
-  caret-color: #e8eeff;
-}
-
-.copilotKitInput > textarea::placeholder,
-.copilotKitInput input::placeholder {
-  color: #9cadde !important;
+.dark [data-copilotkit] .certinator-assistant-msg:hover > div:last-child,
+.dark [data-copilotkit] .certinator-user-msg:hover > div:last-child {
   opacity: 1;
 }
 
-.copilotKitWindow,
-.copilotKitChat {
-  --copilot-kit-primary-color: #6f87ff;
-  --copilot-kit-contrast-color: #ffffff;
-  --copilot-kit-background-color: #0b1227;
-  --copilot-kit-secondary-color: #111a36;
-  --copilot-kit-secondary-contrast-color: #e8eeff;
-  --copilot-kit-separator-color: #2a355e;
-  --copilot-kit-muted-color: #9cadde;
+/* ── Chat input pill — override the default light bg ─────────────── */
+.dark [data-copilotkit] .certinator-chat-input [data-layout] {
+  background: rgba(13, 22, 48, 0.85) !important;
+  box-shadow: 0 4px 16px rgba(2, 8, 26, 0.4) !important;
 }
 
 /* ===================================================================

@@ -44,30 +44,6 @@
       "dependsOn": ["Run Agent HTTP Server"]
     },
     {
-      "label": "Run Agent in Terminal",
-      "type": "shell",
-      "command": "${command:python.interpreterPath} -m debugpy --listen 127.0.0.1:5679 src/app.py --cli",
-      "isBackground": true,
-      "options": {
-        "cwd": "${workspaceFolder}"
-      },
-      "problemMatcher": {
-        "pattern": [
-          {
-            "regexp": "^.*$",
-            "file": 0,
-            "location": 1,
-            "message": 2
-          }
-        ],
-        "background": {
-          "activeOnStart": true,
-          "beginsPattern": ".*",
-          "endsPattern": "Application startup complete|running on|Started server process"
-        }
-      }
-    },
-    {
       "label": "Terminate All Tasks",
       "command": "echo ${input:terminate}",
       "type": "shell",

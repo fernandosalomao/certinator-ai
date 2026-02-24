@@ -10,12 +10,17 @@
   },
   "dependencies": {
     "@ag-ui/client": "^0.0.45",
-    "@copilotkit/react-core": "^1.51.4",
-    "@copilotkit/react-ui": "^1.51.4",
-    "@copilotkit/runtime": "^1.51.4",
+    "@copilotkit/react-core": "1.52.0-next.6",
+    "@copilotkit/react-ui": "1.52.0-next.6",
+    "@copilotkit/runtime": "1.52.0-next.6",
+    "@copilotkitnext/agent": "1.52.0-next.6",
+    "@copilotkitnext/core": "1.52.0-next.6",
+    "@copilotkitnext/react": "1.52.0-next.6",
+    "@copilotkitnext/runtime": "1.52.0-next.6",
     "next": "16.1.6",
     "react": "19.2.3",
-    "react-dom": "19.2.3"
+    "react-dom": "19.2.3",
+    "zod": "^3.25.76"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",

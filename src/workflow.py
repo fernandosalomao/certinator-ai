@@ -341,7 +341,7 @@ async def build_workflow():
     svg_file = viz.export(filename="workflow.svg", format="svg")
     print(f"SVG file saved to: {svg_file}")
 
-    # Wrap as an agent for HTTP serving / CLI
+    # Wrap as an agent for HTTP serving
     agent = workflow.as_agent()
     logger.info("Certinator AI workflow built successfully")
     return agent, credential
