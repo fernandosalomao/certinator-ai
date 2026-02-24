@@ -15,6 +15,9 @@ agent-framework-ag-ui==1.0.0b260107
 # Azure Identity for DefaultAzureCredential
 azure-identity
 
+# Azure AI Projects SDK (Foundry agents v2)
+azure-ai-projects
+
 # Environment variable loading
 python-dotenv
 
