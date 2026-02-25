@@ -20,6 +20,7 @@ from typing import Any
 
 from ag_ui.core import BaseEvent
 from agent_framework import (
+    AgentThread,
     FunctionResultContent,
     Role,
 )
@@ -112,6 +113,54 @@ configure_otel_providers()
 #     )
 # ]
 # otel_metrics.set_meter_provider(MeterProvider(metric_readers=_metric_readers))
+
+
+# ---------------------------------------------------------------------------
+# Thread Store — In-memory persistence for conversation threads
+# ---------------------------------------------------------------------------
+# Maps CopilotKit thread_id → AgentThread instance.  Threads persist across
+# requests within the same server process, enabling conversation continuity.
+# WARNING: Lost on server restart.  Production should use Redis/DB.
+# ---------------------------------------------------------------------------
+_thread_store: dict[str, AgentThread] = {}
+
+
+def get_or_create_thread(thread_id: str, run_id: str | None = None) -> AgentThread:
+    """
+    Retrieve an existing thread or create a new one.
+
+    Parameters:
+        thread_id: The CopilotKit thread ID (from frontend).
+        run_id: Optional AG-UI run ID for metadata.
+
+    Returns:
+        AgentThread: Existing or newly created thread.
+    """
+    if thread_id in _thread_store:
+        thread = _thread_store[thread_id]
+        logger.info(
+            "Thread store: retrieved existing thread_id=%s (history_len=%d)",
+            thread_id,
+            len(getattr(thread, "messages", []) or []),
+        )
+        # Update run_id in metadata for current request
+        if run_id and hasattr(thread, "metadata"):
+            thread.metadata["ag_ui_run_id"] = run_id
+        return thread
+
+    # Create new thread
+    thread = AgentThread()
+    thread.metadata = {
+        "ag_ui_thread_id": thread_id,
+        "ag_ui_run_id": run_id or "",
+    }
+    _thread_store[thread_id] = thread
+    logger.info(
+        "Thread store: created new thread_id=%s (total_threads=%d)",
+        thread_id,
+        len(_thread_store),
+    )
+    return thread
 
 
 # ---------------------------------------------------------------------------
@@ -315,7 +364,6 @@ class RequestInfoOrchestrator(Orchestrator):
         context: ExecutionContext,
     ) -> AsyncGenerator[BaseEvent, None]:
         """Handle HITL response by calling agent.run_stream directly."""
-        from agent_framework import AgentThread
         from agent_framework_ag_ui._events import AgentFrameworkEventBridge
         from agent_framework_ag_ui._message_adapters import (
             agui_messages_to_agent_framework,
@@ -374,11 +422,8 @@ class RequestInfoOrchestrator(Orchestrator):
         )
         yield event_bridge.create_run_started_event()
 
-        thread = AgentThread()
-        thread.metadata = {
-            "ag_ui_thread_id": context.thread_id,
-            "ag_ui_run_id": context.run_id,
-        }
+        # Use persistent thread store for conversation continuity
+        thread = get_or_create_thread(context.thread_id, context.run_id)
         update_count = 0
         async for update in context.agent.run_stream(
             tool_messages,
@@ -442,8 +487,41 @@ class RequestInfoOrchestrator(Orchestrator):
             )
 
         # Delegate to DefaultOrchestrator
-        default = DefaultOrchestrator()
+        default = PersistentDefaultOrchestrator()
         async for event in default.run(context):
+            yield event
+
+
+# ---------------------------------------------------------------------------
+# Persistent Default Orchestrator
+# ---------------------------------------------------------------------------
+class PersistentDefaultOrchestrator(DefaultOrchestrator):
+    """DefaultOrchestrator wrapper that logs thread info.
+
+    Note: Full thread persistence for DefaultOrchestrator flows requires
+    deeper SDK integration. Thread persistence currently works for:
+    - HITL responses (RequestInfoOrchestrator._run_with_pending)
+
+    For initial user messages, each request still creates a fresh thread.
+    This is acceptable because CopilotKit maintains conversation history
+    client-side and sends the full history on each request.
+    """
+
+    async def run(
+        self,
+        context: ExecutionContext,
+    ) -> AsyncGenerator[BaseEvent, None]:
+        """Delegate to parent DefaultOrchestrator, with logging."""
+        logger.info(
+            "PersistentDefaultOrchestrator: delegating to DefaultOrchestrator "
+            "for thread_id=%s, run_id=%s",
+            context.thread_id,
+            context.run_id,
+        )
+        # Record thread_id for debugging (actual thread created by parent)
+        _ = get_or_create_thread(context.thread_id, context.run_id)
+
+        async for event in super().run(context):
             yield event
 
 
@@ -471,7 +549,8 @@ async def run_agui() -> None:
     #      the workflow has pending request_info HITL calls.
     #   2. HumanInTheLoopOrchestrator — handles tool approval
     #      responses (accept / reject).
-    #   3. DefaultOrchestrator — standard agent execution.
+    #   3. PersistentDefaultOrchestrator — standard agent execution
+    #      with in-memory thread persistence.
     ag_agent = AgentFrameworkAgent(
         agent=agent,
         name="Certinator AI",
@@ -484,7 +563,7 @@ async def run_agui() -> None:
         orchestrators=[
             RequestInfoOrchestrator(),
             HumanInTheLoopOrchestrator(),
-            DefaultOrchestrator(),
+            PersistentDefaultOrchestrator(),
         ],
     )
 

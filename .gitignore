@@ -255,3 +255,4 @@ yarn-error.log*
 next-env.d.ts
 
 .mastra/
+*.playwright-mcp

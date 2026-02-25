@@ -109,6 +109,29 @@ body {
   scrollbar-color: rgba(156, 173, 222, 0.15) transparent;
 }
 
+/* ── Scroll-to-bottom button — visible on dark theme ─────────────────── */
+/* CopilotKit v2 uses [data-slot] attributes for slot components */
+.dark [data-copilotkit] [data-slot="scrollToBottomButton"],
+.dark [data-copilotkit] button[aria-label*="scroll"],
+.dark [data-copilotkit] button[aria-label*="bottom"],
+/* Fallback: target any absolute-positioned button near bottom of scroll area */
+.dark [data-copilotkit] [class*="scroll"] > button {
+  background: rgba(255, 255, 255, 0.15) !important;
+  color: rgba(255, 255, 255, 0.9) !important;
+  border: 1px solid rgba(255, 255, 255, 0.25) !important;
+  backdrop-filter: blur(8px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  transition: all 0.2s ease;
+}
+
+.dark [data-copilotkit] [data-slot="scrollToBottomButton"]:hover,
+.dark [data-copilotkit] button[aria-label*="scroll"]:hover,
+.dark [data-copilotkit] button[aria-label*="bottom"]:hover,
+.dark [data-copilotkit] [class*="scroll"] > button:hover {
+  background: rgba(255, 255, 255, 0.25) !important;
+  border-color: rgba(255, 255, 255, 0.4) !important;
+}
+
 /* ===================================================================
    CopilotKit v2 — Kill stray vertical/horizontal lines
    The v2 base CSS sets `*{border-color:var(--border)}` which, combined

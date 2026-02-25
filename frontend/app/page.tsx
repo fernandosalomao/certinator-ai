@@ -88,6 +88,8 @@ export default function Page() {
           <SlowRunIndicator />
           <CopilotChat
             agentId="my_agent"
+            /* ── Auto-scroll & scroll-to-bottom button ────────────────── */
+            autoScroll={true}
             /* ── Layout slots (inherited from CopilotChatView) ────────── */
             chatView="cpk:min-h-0"
             /* scrollView accepts Partial<ScrollViewProps> — includes feather */
