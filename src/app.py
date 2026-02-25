@@ -414,11 +414,29 @@ class RequestInfoOrchestrator(Orchestrator):
             len(tool_messages),
         )
 
-        # Set up event bridge and call agent directly
+        # Set up event bridge and call agent directly.
+        # CRITICAL: pass the FULL conversation history as input_messages,
+        # not just tool_only_raw.  The event bridge uses input_messages to
+        # build MessagesSnapshotEvent payloads.  If only tool results are
+        # included, the snapshot replaces the entire AG-UI client messages
+        # array with just those results, wiping out all prior chat history
+        # (BUG #1), causing TEXT_MESSAGE_CONTENT events to reference
+        # message IDs that no longer exist (BUG #2 — study plan text
+        # silently dropped) and triggering the "No message found" console
+        # warning (BUG #3).
+        all_raw_messages = context.input_data.get("messages", [])
+
+        # Initialise current state from the frontend state payload so that
+        # predict-state deltas stay consistent across HITL round-trips.
+        current_state: dict[str, Any] = dict(context.input_data.get("state", {}) or {})
+
         event_bridge = AgentFrameworkEventBridge(
             run_id=context.run_id,
             thread_id=context.thread_id,
-            input_messages=tool_only_raw,
+            input_messages=all_raw_messages,
+            predict_state_config=context.config.predict_state_config,
+            current_state=current_state,
+            require_confirmation=context.config.require_confirmation,
         )
         yield event_bridge.create_run_started_event()
 
