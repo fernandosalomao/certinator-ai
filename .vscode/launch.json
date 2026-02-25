@@ -2,6 +2,20 @@
   "version": "0.2.0",
   "configurations": [
     {
+      "name": "🚀 Run Certinator (Full App)",
+      "type": "node-terminal",
+      "request": "launch",
+      "command": "source ~/.nvm/nvm.sh && nvm use && pnpm dev",
+      "cwd": "${workspaceFolder}/frontend",
+      "preLaunchTask": "Run Backend Server",
+      "postDebugTask": "Terminate All Tasks",
+      "serverReadyAction": {
+        "pattern": "- Local:.*(https?://[^\\s]+)",
+        "uriFormat": "%s",
+        "action": "openExternally"
+      }
+    },
+    {
       "name": "Debug Agent HTTP Server",
       "type": "debugpy",
       "request": "attach",
@@ -10,18 +24,6 @@
         "port": 5679
       },
       "preLaunchTask": "Open Agent Inspector",
-      "internalConsoleOptions": "neverOpen",
-      "postDebugTask": "Terminate All Tasks"
-    },
-    {
-      "name": "Debug Agent in Terminal",
-      "type": "debugpy",
-      "request": "attach",
-      "connect": {
-        "host": "localhost",
-        "port": 5679
-      },
-      "preLaunchTask": "Run Agent in Terminal",
       "internalConsoleOptions": "neverOpen",
       "postDebugTask": "Terminate All Tasks"
     }

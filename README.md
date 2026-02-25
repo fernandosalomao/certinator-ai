@@ -12,21 +12,85 @@ Certinator AI is a multi-agent system that can effectively assist students in th
 
 ### Required Tools
 - **Python 3.12+** — [python.org/downloads](https://python.org/downloads)
+- **Node.js 18+** and **pnpm** — [nodejs.org](https://nodejs.org/) / [pnpm.io](https://pnpm.io/installation)
 
 ### Azure Subscription Notes
 > [!IMPORTANT]
 > Microsoft Foundry requires an Azure subscription. A **free trial** provides $200 credit for 30 days. Some features may incur costs after the trial. Check the [Azure pricing calculator](https://azure.microsoft.com/pricing/calculator/) to estimate costs.
 
-## 🛠️ Environment Setup
+## 🚀 Quick Start (Choose One)
+
+### Option 1: Command Line (Recommended)
+
+```bash
+# 1. Clone and enter the repo
+git clone https://github.com/fernandosalomao/certinator-ai.git
+cd certinator-ai
+
+# 2. Configure environment
+cp .env.sample .env
+# Edit .env with your Azure credentials
+
+# 3. Install all dependencies
+make install
+
+# 4. Start both backend + frontend
+make dev
+```
+
+**Press `Ctrl+C` to stop both services.**
+
+Other useful commands:
+- `make help` — Show all available commands
+- `make stop` — Force stop all processes
+- `make logs` — Tail backend logs
+
+### Option 2: VS Code Tasks
+
+1. Open the project in VS Code
+2. Press `Ctrl+Shift+P` → **Tasks: Run Task**
+3. Select **🚀 Start Certinator (Full App)**
+
+**To stop:** Run task **⏹️ Stop All**
+
+### Option 3: Dev Container (GitHub Codespaces / Docker)
+
+1. Open in GitHub Codespaces or VS Code with Dev Containers extension
+2. Wait for automatic setup (installs all dependencies)
+3. Configure `.env` with your credentials
+4. Run `make dev` or use VS Code task **🚀 Start Certinator**
+
+> [!TIP]
+> The dev container automatically forwards ports 3000 (frontend) and 8087 (backend).
+
+---
+
+## 🛠️ Manual Environment Setup
+
+<details>
+<summary>Click to expand manual setup instructions</summary>
 
 ### Step 1: Clone the Repository
 ```bash
 git clone https://github.com/fernandosalomao/certinator-ai.git
+cd certinator-ai
 ```
 
-### Step 2: Install dependencies
+### Step 2: Install Backend Dependencies
+```bash
+python3 -m venv .venv
+source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+pip install -r requirements.txt
+```
 
-### Step 3: Set Up Azure Credentials
+### Step 3: Install Frontend Dependencies
+```bash
+cd frontend
+pnpm install
+cd ..
+```
+
+### Step 4: Configure Environment
 Copy `.env.sample` to `.env` and fill in the values:
 
 ```bash
@@ -51,23 +115,31 @@ AZURE_AI_MODEL_DEPLOYMENT_NAME=gpt-4.1
 > 3. In your project, go to **Project settings** (gear icon) → **Project properties**
 > 4. Copy the **Project connection string**
 
-## 🚀 Running the Application
+### Step 5: Run Services Separately
 
-### Backend
-
+**Backend:**
 ```bash
-python src/app.py
-
+source .venv/bin/activate
+python src/app.py --agui
 ```
 
-### Frontend
-
+**Frontend (in another terminal):**
 ```bash
 cd frontend
 pnpm dev
 ```
 
-### What You Get
+</details>
+
+---
+
+## 🌐 Access the Application
+
+Once running:
+- **Frontend UI:** http://localhost:3000
+- **Backend API:** http://localhost:8087
+
+## 🤖 What You Get
 
 The app runs a **complete multi-agent workflow** orchestrating 6 specialized agents:
 
