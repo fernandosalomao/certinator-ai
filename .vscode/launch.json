@@ -1,22 +1,43 @@
 {
   "version": "0.2.0",
   "configurations": [
+    // =========================================================================
+    // Quick Run (no debugging) - For testers
+    // =========================================================================
     {
       "name": "🚀 Run Certinator (Full App)",
       "type": "node-terminal",
       "request": "launch",
-      "command": "source ~/.nvm/nvm.sh && nvm use && pnpm dev",
+      "command": "source ~/.nvm/nvm.sh && nvm use && corepack enable && pnpm dev",
       "cwd": "${workspaceFolder}/frontend",
       "preLaunchTask": "Run Backend Server",
-      "postDebugTask": "Terminate All Tasks",
+      "postDebugTask": "Stop Everything",
       "serverReadyAction": {
         "pattern": "- Local:.*(https?://[^\\s]+)",
         "uriFormat": "%s",
         "action": "openExternally"
       }
     },
+    // =========================================================================
+    // Debug Backend Only (Python)
+    // =========================================================================
     {
-      "name": "Debug Agent HTTP Server",
+      "name": "🐍 Debug Backend (Python)",
+      "type": "debugpy",
+      "request": "attach",
+      "connect": {
+        "host": "localhost",
+        "port": 5679
+      },
+      "preLaunchTask": "Run Backend Server (Debug)",
+      "postDebugTask": "Stop Everything",
+      "justMyCode": true
+    },
+    // =========================================================================
+    // Debug Backend + Agent Inspector
+    // =========================================================================
+    {
+      "name": "🔍 Debug Backend + Agent Inspector",
       "type": "debugpy",
       "request": "attach",
       "connect": {
@@ -25,7 +46,56 @@
       },
       "preLaunchTask": "Open Agent Inspector",
       "internalConsoleOptions": "neverOpen",
-      "postDebugTask": "Terminate All Tasks"
+      "postDebugTask": "Stop Everything",
+      "justMyCode": true
+    },
+    // =========================================================================
+    // Debug Frontend Only (Chrome)
+    // =========================================================================
+    {
+      "name": "🌐 Debug Frontend (Chrome)",
+      "type": "chrome",
+      "request": "launch",
+      "url": "http://localhost:3000",
+      "webRoot": "${workspaceFolder}/frontend",
+      "preLaunchTask": "Run Frontend Dev",
+      "postDebugTask": "Stop Everything",
+      "sourceMaps": true
+    },
+    // =========================================================================
+    // Individual debuggers for compound config
+    // =========================================================================
+    {
+      "name": "Attach Python",
+      "type": "debugpy",
+      "request": "attach",
+      "connect": { "host": "localhost", "port": 5679 },
+      "justMyCode": true,
+      "presentation": { "hidden": true }
+    },
+    {
+      "name": "Attach Chrome",
+      "type": "chrome",
+      "request": "launch",
+      "url": "http://localhost:3000",
+      "webRoot": "${workspaceFolder}/frontend",
+      "sourceMaps": true,
+      "presentation": { "hidden": true }
+    }
+  ],
+  // ===========================================================================
+  // Compound Configurations (Multiple Debuggers)
+  // ===========================================================================
+  "compounds": [
+    {
+      "name": "🔥 Debug Full Stack (Python + Chrome)",
+      "configurations": ["Attach Python", "Attach Chrome"],
+      "preLaunchTask": "Start Full Stack (Debug)",
+      "stopAll": true,
+      "postDebugTask": "Stop Everything",
+      "presentation": {
+        "order": 1
+      }
     }
   ]
 }

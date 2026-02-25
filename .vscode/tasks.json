@@ -17,9 +17,9 @@
     },
     {
       "label": "⏹️ Stop All",
-      "detail": "Terminates all running tasks (backend + frontend)",
-      "command": "echo ${input:terminate}",
-      "type": "shell",
+      "detail": "Terminates all running tasks and kills processes",
+      "dependsOn": ["Kill All Processes", "Terminate All Tasks"],
+      "dependsOrder": "sequence",
       "problemMatcher": []
     },
     // =========================================================================
@@ -36,7 +36,7 @@
     {
       "label": "Run Backend Server",
       "type": "shell",
-      "command": "${command:python.interpreterPath} src/app.py --agui",
+      "command": ".venv/bin/python src/app.py --agui",
       "isBackground": true,
       "options": {
         "cwd": "${workspaceFolder}"
@@ -66,7 +66,7 @@
       "label": "Run Agent HTTP Server (Debug)",
       "detail": "Backend with debugpy for VS Code debugging",
       "type": "shell",
-      "command": "${command:python.interpreterPath} -m debugpy --listen 127.0.0.1:5679 -m agentdev run src/app.py --verbose --port 8087",
+      "command": ".venv/bin/python -m debugpy --listen 127.0.0.1:5679 -m agentdev run src/app.py --verbose --port 8087",
       "isBackground": true,
       "options": {
         "cwd": "${workspaceFolder}"
@@ -102,13 +102,51 @@
       },
       "dependsOn": ["Run Agent HTTP Server (Debug)"]
     },
+    {
+      "label": "Run Backend Server (Debug)",
+      "detail": "Backend with debugpy (no Agent Inspector)",
+      "type": "shell",
+      "command": ".venv/bin/python -m debugpy --listen 127.0.0.1:5679 src/app.py --agui",
+      "isBackground": true,
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "dependsOn": ["Validate prerequisites"],
+      "presentation": {
+        "group": "certinator",
+        "reveal": "always",
+        "panel": "dedicated"
+      },
+      "problemMatcher": {
+        "pattern": [
+          {
+            "regexp": "^.*$",
+            "file": 0,
+            "location": 1,
+            "message": 2
+          }
+        ],
+        "background": {
+          "activeOnStart": true,
+          "beginsPattern": ".*",
+          "endsPattern": "Application startup complete|running on|Started server process|Uvicorn running"
+        }
+      }
+    },
+    {
+      "label": "Start Full Stack (Debug)",
+      "detail": "Starts backend (with debugpy) + frontend in parallel",
+      "dependsOn": ["Run Backend Server (Debug)", "Run Frontend Dev"],
+      "dependsOrder": "parallel",
+      "problemMatcher": []
+    },
     // =========================================================================
     // Frontend Tasks
     // =========================================================================
     {
       "label": "Run Frontend Dev",
       "type": "shell",
-      "command": "source ~/.nvm/nvm.sh && nvm use && pnpm dev",
+      "command": "source ~/.nvm/nvm.sh && nvm use && corepack enable && pnpm dev",
       "isBackground": true,
       "options": {
         "cwd": "${workspaceFolder}/frontend",
@@ -141,7 +179,7 @@
     {
       "label": "Install Frontend Dependencies",
       "type": "shell",
-      "command": "source ~/.nvm/nvm.sh && nvm use && pnpm install",
+      "command": "source ~/.nvm/nvm.sh && nvm use && corepack enable && pnpm install",
       "options": {
         "cwd": "${workspaceFolder}/frontend",
         "shell": {
@@ -167,7 +205,7 @@
     {
       "label": "Install Backend Dependencies",
       "type": "shell",
-      "command": "${command:python.interpreterPath} -m pip install -r requirements.txt",
+      "command": ".venv/bin/python -m pip install -r requirements.txt",
       "options": {
         "cwd": "${workspaceFolder}"
       },
@@ -180,6 +218,23 @@
       "label": "Terminate All Tasks",
       "command": "echo ${input:terminate}",
       "type": "shell",
+      "problemMatcher": []
+    },
+    {
+      "label": "Kill All Processes",
+      "type": "shell",
+      "command": "pkill -f 'src/app.py' || true; pkill -f 'next dev' || true; pkill -f 'node.*frontend' || true; echo 'Processes killed'",
+      "presentation": {
+        "reveal": "silent",
+        "close": true
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "Stop Everything",
+      "detail": "Terminates all tasks AND kills lingering processes",
+      "dependsOn": ["Kill All Processes", "Terminate All Tasks"],
+      "dependsOrder": "sequence",
       "problemMatcher": []
     }
   ],
