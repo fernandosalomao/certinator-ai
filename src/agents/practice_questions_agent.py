@@ -7,9 +7,7 @@ import sys
 from typing import Any
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from config import get_ai_client
-
-MODEL_DEPLOYMENT_NAME = "gpt-4.1"
+from config import LLM_MODEL_PRACTICE_QUESTIONS, get_ai_client
 
 # INSTRUCTIONS: str = """\
 # You are the Practice Question specialist for Certinator AI. \
@@ -180,7 +178,7 @@ def create_practice_agent(
 ):
     """Create the practice question agent instance."""
     client = get_ai_client(
-        model_deployment_name=MODEL_DEPLOYMENT_NAME,
+        model_deployment_name=LLM_MODEL_PRACTICE_QUESTIONS,
         project_endpoint=project_endpoint,
         credential=credential,
     )

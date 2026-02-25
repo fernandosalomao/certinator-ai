@@ -19,40 +19,65 @@ log = logging.getLogger(__name__)
 
 # ── LLM Provider Selection ────────────────────────────────────────────────
 # Supported providers: "azure" (default), "github", "local"
-#   - azure:  Azure AI Foundry (requires FOUNDRY_PROJECT_ENDPOINT)
+#   - azure:  Azure AI Foundry (requires AZ CLI login + LLM_ENDPOINT)
 #   - github: GitHub Models (requires GITHUB_TOKEN)
-#   - local:  FoundryLocal (requires local installation)
+#   - local:  FoundryLocal (runs locally, no endpoint required)
 LLM_PROVIDER: Literal["azure", "github", "local"] = os.getenv(
     "LLM_PROVIDER", "azure"
 ).lower()  # type: ignore[assignment]
 
-# Legacy flag for backward compatibility (USE_LOCAL_LLM=true → LLM_PROVIDER=local)
-if os.getenv("USE_LOCAL_LLM", "false").lower() in ("true", "1", "yes"):
-    LLM_PROVIDER = "local"
-
-# ── Azure AI Foundry ──────────────────────────────────────────────────────
-FOUNDRY_PROJECT_ENDPOINT: str = os.getenv("FOUNDRY_PROJECT_ENDPOINT", "")
+# ── Shared Endpoint ───────────────────────────────────────────────────────
+# LLM_ENDPOINT is used by both Azure and GitHub providers.
+#   - azure:  Azure AI Foundry project endpoint
+#             e.g. https://<name>.services.ai.azure.com/api/projects/<id>
+#   - github: GitHub Models inference endpoint
+#             e.g. https://models.github.ai/inference (default)
+#   - local:  not required (FoundryLocal manages its own endpoint)
+LLM_ENDPOINT: str = os.getenv(
+    "LLM_ENDPOINT",
+    # Sensible defaults per provider
+    "https://models.github.ai/inference" if LLM_PROVIDER == "github" else "",
+)
 
 # ── GitHub Models Configuration ───────────────────────────────────────────
 # GitHub Models provides free/low-cost access to GPT-4o, GPT-4o-mini, etc.
 # See: https://github.com/marketplace/models
-GITHUB_ENDPOINT: str = os.getenv(
-    "GITHUB_ENDPOINT", "https://models.github.ai/inference"
-)
 GITHUB_TOKEN: str = os.getenv("GITHUB_TOKEN", "")
-GITHUB_MODEL_ID: str = os.getenv("GITHUB_MODEL_ID", "openai/gpt-4.1")
 
-# ── FoundryLocal Configuration ────────────────────────────────────────────
-# Model alias for FoundryLocal (e.g., "phi-4-mini", "qwen2.5-0.5b")
-# See: https://learn.microsoft.com/foundry/foundry-local/
-FOUNDRY_LOCAL_MODEL_ALIAS: str = os.getenv("FOUNDRY_LOCAL_MODEL_ALIAS", "phi-4-mini")
+# ── Per-provider default model names ─────────────────────────────────────
+_PROVIDER_DEFAULT_MODELS: dict[str, str] = {
+    "azure": "gpt-4.1",
+    "github": "openai/gpt-4o",
+    "local": "qwen2.5-14b",
+}
+
+# ── Default model (used by all agents unless overridden) ─────────────────
+# LLM_MODEL_DEFAULT falls back to a sensible per-provider default when unset.
+LLM_MODEL_DEFAULT: str = os.getenv(
+    "LLM_MODEL_DEFAULT",
+    _PROVIDER_DEFAULT_MODELS.get(LLM_PROVIDER, "gpt-4.1"),
+)
+
+# ── Per-agent model overrides ─────────────────────────────────────────────
+# Each agent reads its own env var; falls back to LLM_MODEL_DEFAULT.
+LLM_MODEL_COORDINATOR: str = os.getenv("LLM_MODEL_COORDINATOR", LLM_MODEL_DEFAULT)
+LLM_MODEL_CERTIFICATION_INFO: str = os.getenv(
+    "LLM_MODEL_CERTIFICATION_INFO", LLM_MODEL_DEFAULT
+)
+LLM_MODEL_CRITIC: str = os.getenv("LLM_MODEL_CRITIC", LLM_MODEL_DEFAULT)
+LLM_MODEL_LEARNING_PATH_FETCHER: str = os.getenv(
+    "LLM_MODEL_LEARNING_PATH_FETCHER", LLM_MODEL_DEFAULT
+)
+LLM_MODEL_PRACTICE_QUESTIONS: str = os.getenv(
+    "LLM_MODEL_PRACTICE_QUESTIONS", LLM_MODEL_DEFAULT
+)
+LLM_MODEL_STUDY_PLAN_GENERATOR: str = os.getenv(
+    "LLM_MODEL_STUDY_PLAN_GENERATOR", LLM_MODEL_DEFAULT
+)
 
 # ── Feature Flags ─────────────────────────────────────────────────────────
 # Default number of practice questions per quiz session.
 DEFAULT_PRACTICE_QUESTIONS: int = int(os.getenv("DEFAULT_PRACTICE_QUESTIONS", "10"))
-
-# Legacy alias for backward compatibility
-USE_LOCAL_LLM: bool = LLM_PROVIDER == "local"
 
 
 # ── FoundryLocal Connection ───────────────────────────────────────────────
@@ -99,18 +124,18 @@ def get_foundry_local_connection() -> FoundryLocalConnection:
 
     log.info(
         "Bootstrapping FoundryLocal with model alias '%s' ...",
-        FOUNDRY_LOCAL_MODEL_ALIAS,
+        LLM_MODEL_DEFAULT,
     )
 
     try:
-        manager = FoundryLocalManager(FOUNDRY_LOCAL_MODEL_ALIAS)
-        model_info = manager.get_model_info(FOUNDRY_LOCAL_MODEL_ALIAS)
+        manager = FoundryLocalManager(LLM_MODEL_DEFAULT)
+        model_info = manager.get_model_info(LLM_MODEL_DEFAULT)
 
         _foundry_local_conn = FoundryLocalConnection(
             endpoint=manager.endpoint,
             api_key=manager.api_key,
-            model_id=model_info.id if model_info else FOUNDRY_LOCAL_MODEL_ALIAS,
-            model_alias=FOUNDRY_LOCAL_MODEL_ALIAS,
+            model_id=model_info.id if model_info else LLM_MODEL_DEFAULT,
+            model_alias=LLM_MODEL_DEFAULT,
         )
         log.info(
             "✅ FoundryLocal ready → endpoint=%s  model=%s",
@@ -165,15 +190,16 @@ def get_ai_client(
                 "GITHUB_TOKEN is required when LLM_PROVIDER=github.\n"
                 "Get your token from: https://github.com/settings/tokens"
             )
+        endpoint = LLM_ENDPOINT or "https://models.github.ai/inference"
         log.info(
             "Using GitHub Models → endpoint=%s  model=%s",
-            GITHUB_ENDPOINT,
-            GITHUB_MODEL_ID,
+            endpoint,
+            model_deployment_name,
         )
         return OpenAIChatClient(
             api_key=GITHUB_TOKEN,
-            base_url=GITHUB_ENDPOINT,
-            model_id=GITHUB_MODEL_ID,
+            base_url=endpoint,
+            model_id=model_deployment_name,
         )
 
     elif LLM_PROVIDER == "local":
@@ -189,12 +215,16 @@ def get_ai_client(
     else:  # azure (default)
         from agent_framework.azure import AzureAIClient
 
-        if not project_endpoint or not credential:
+        endpoint = project_endpoint or LLM_ENDPOINT
+        if not endpoint or not credential:
             raise ValueError(
-                "project_endpoint and credential are required when LLM_PROVIDER=azure"
+                "LLM_ENDPOINT (or project_endpoint) and Azure credential are "
+                "required when LLM_PROVIDER=azure. "
+                "Ensure LLM_ENDPOINT is set in your .env and you are logged "
+                "in via 'az login'."
             )
         return AzureAIClient(
-            project_endpoint=project_endpoint,
+            project_endpoint=endpoint,
             model_deployment_name=model_deployment_name,
             credential=credential,
         )

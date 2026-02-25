@@ -7,9 +7,7 @@ import sys
 from typing import Any
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from config import get_ai_client
-
-MODEL_DEPLOYMENT_NAME = "gpt-4.1-mini"
+from config import LLM_MODEL_COORDINATOR, get_ai_client
 
 # INSTRUCTIONS: str = """\
 # You are the Coordinator agent for Certinator AI, a multi-agent system \
@@ -161,7 +159,7 @@ def create_coordinator_agent(
 ):
     """Create the coordinator agent instance."""
     client = get_ai_client(
-        model_deployment_name=MODEL_DEPLOYMENT_NAME,
+        model_deployment_name=LLM_MODEL_COORDINATOR,
         project_endpoint=project_endpoint,
         credential=credential,
     )

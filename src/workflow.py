@@ -59,7 +59,7 @@ from agents import (
     create_study_plan_agent,
 )
 from config import (
-    FOUNDRY_PROJECT_ENDPOINT,
+    LLM_ENDPOINT,
     LLM_PROVIDER,
 )
 from executors.certification_info_executor import CertificationInfoExecutor
@@ -203,7 +203,7 @@ async def build_workflow():
     # Azure credential is only needed when using Azure AI Foundry
     use_azure = LLM_PROVIDER == "azure"
     credential = DefaultAzureCredential() if use_azure else None
-    project_endpoint = FOUNDRY_PROJECT_ENDPOINT if use_azure else None
+    project_endpoint = LLM_ENDPOINT if use_azure else None
 
     if LLM_PROVIDER == "github":
         logger.info("Using GitHub Models for LLM inference")

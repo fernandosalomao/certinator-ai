@@ -9,9 +9,7 @@ from typing import Any
 from agent_framework import MCPStreamableHTTPTool
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from config import get_ai_client
-
-MODEL_DEPLOYMENT_NAME = "gpt-4.1"
+from config import LLM_MODEL_CERTIFICATION_INFO, get_ai_client
 
 # INSTRUCTIONS: str = """\
 # You are the Certification Information specialist for Certinator AI. \
@@ -153,7 +151,7 @@ def create_cert_info_agent(
 ):
     """Create the certification information agent instance."""
     client = get_ai_client(
-        model_deployment_name=MODEL_DEPLOYMENT_NAME,
+        model_deployment_name=LLM_MODEL_CERTIFICATION_INFO,
         project_endpoint=project_endpoint,
         credential=credential,
     )
@@ -184,7 +182,7 @@ def create_cert_info_agent_no_mcp(
         ChatAgent: Configured fallback agent instance.
     """
     client = get_ai_client(
-        model_deployment_name=MODEL_DEPLOYMENT_NAME,
+        model_deployment_name=LLM_MODEL_CERTIFICATION_INFO,
         project_endpoint=project_endpoint,
         credential=credential,
     )

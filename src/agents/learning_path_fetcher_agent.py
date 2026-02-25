@@ -9,9 +9,7 @@ from typing import Any
 from agent_framework import MCPStreamableHTTPTool
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from config import get_ai_client
-
-MODEL_DEPLOYMENT_NAME = "gpt-4.1"
+from config import LLM_MODEL_LEARNING_PATH_FETCHER, get_ai_client
 
 # INSTRUCTIONS: str = """\
 # You are the Learning Path Fetcher for Certinator AI. Your job is to \
@@ -146,7 +144,7 @@ def create_learning_path_fetcher_agent(
 ):
     """Create the learning path fetcher agent instance."""
     client = get_ai_client(
-        model_deployment_name=MODEL_DEPLOYMENT_NAME,
+        model_deployment_name=LLM_MODEL_LEARNING_PATH_FETCHER,
         project_endpoint=project_endpoint,
         credential=credential,
     )
