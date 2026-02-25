@@ -90,14 +90,6 @@ class PostStudyPlanExecutor(Executor):
         }
         # Persist for HITL response handler internal reads.
         await ctx.shared_state.set(POST_STUDY_PLAN_CTX_KEY, context_data)
-        # Emit to frontend AG-UI state via synthetic tool call pair.
-        await emit_state_snapshot(
-            ctx=ctx,
-            executor_id=self.id,
-            tool_name="update_post_study_plan_context",
-            tool_argument="context",
-            state_value=context_data,
-        )
 
         # Offer practice questions via HITL.
         cert = approved.certification or "your certification"

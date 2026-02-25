@@ -256,3 +256,5 @@ next-env.d.ts
 
 .mastra/
 *.playwright-mcp
+debug*.png
+.github/debug/*

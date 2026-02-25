@@ -30,8 +30,8 @@ This document identifies gaps between the current implementation and the [requir
 | G10 | [Frontend lacks error handling](#g10-frontend-lacks-error-handling) | User Experience | **Medium** | Low | ✅ Implemented |
 | G11 | [No automated evaluation pipeline (CI/CD)](#g11-no-automated-evaluation-pipeline-cicd) | Evaluations & Telemetry | **Medium** | High | ❌ Missing |
 | G12 | [Single-intent routing only](#g12-single-intent-routing-only) | Reasoning & Multi-step Thinking | **Medium** | High | ❌ Missing |
-| G13 | [`useCopilotChatInternal` is private API](#g13-usecoplilotchatinternal-is-private-api) | Reliability | **Medium** | Medium | ⚠️ Workaround |
-| G14 | [No dynamic chat suggestions](#g14-no-dynamic-chat-suggestions) | User Experience | **Low** | Low | ❌ Missing |
+| G13 | [`useCopilotChatInternal` is private API](#g13-usecoplilotchatinternal-is-private-api) | Reliability | **Medium** | Medium | ✅ Implemented |
+| G14 | [No dynamic chat suggestions](#g14-no-dynamic-chat-suggestions) | User Experience | **Low** | Low | ✅ Implemented |
 | G15 | [Feedback reports not validated](#g15-feedback-reports-not-validated) | Accuracy & Relevance | **Low** | Low | ❌ Missing |
 
 ---
@@ -258,16 +258,9 @@ This document identifies gaps between the current implementation and the [requir
 
 **Requirement**: Reliability — Robust patterns
 
-**Current state**: `CustomAssistantMessage` uses `useCopilotChatInternal.sendMessage` to submit HITL responses. This is an internal CopilotKit API not part of the public contract.
+**Status**: ✅ **Implemented** (CopilotKit v2 migration)
 
-**What's missing**: A stable alternative for submitting HITL responses.
-
-**Recommended approach**:
-- Investigate `useCopilotAction` + `renderAndWaitForResponse` as a HITL replacement
-- Register three frontend actions (`quiz_session`, `study_plan_offer`, `practice_offer`)
-- Have the backend emit tool calls with those specific names instead of generic `request_info`
-- This would eliminate `CustomAssistantMessage`, `findPendingRequestInfo`, and the `useCopilotChatInternal` dependency
-- **Estimated effort**: 6-8 hours (frontend + backend changes)
+**Resolution**: Migrated from CopilotKit v1 to v2 APIs. `CustomAssistantMessage` and `useCopilotChatInternal` have been removed entirely. HITL responses are now handled via the public `useHumanInTheLoop` hook registered in `CertinatorHooks.tsx`. The hook dispatches on `args.data.type` (`quiz_session`, `study_plan_offer`, `practice_offer`) and submits responses through the official CopilotKit v2 respond callback. `CustomAssistantMessage.tsx` was deleted as dead code.
 
 ---
 
@@ -275,21 +268,12 @@ This document identifies gaps between the current implementation and the [requir
 
 **Requirement**: User Experience & Presentation
 
-**Current state**: Static suggestion chips are hardcoded in `page.tsx`.
+**Status**: ✅ **Implemented** (CopilotKit v2 migration)
 
-**What's missing**: Context-aware dynamic suggestions using `useCopilotChatSuggestions`.
-
-**Recommended approach**:
-```tsx
-useCopilotChatSuggestions({
-  instructions: "Suggest follow-up actions based on conversation state. " +
-    "If a study plan was delivered, suggest starting practice. " +
-    "If quiz results showed weak areas, suggest focused study plan. " +
-    "If no conversation yet, suggest exploring a certification.",
-  maxSuggestions: 3,
-});
-```
-- **Estimated effort**: 1-2 hours
+**Resolution**: Implemented via `useConfigureSuggestions` (CopilotKit v2 API) in `CertinatorHooks.tsx`. Two registrations:
+- **Static** (before first message): AZ-104 overview, AI-900 study plan, AI-102 practice quiz chips
+- **Dynamic** (after first message): context-aware follow-up suggestions driven by conversation state.
+Confirmed working in debug sessions (suggestion chips visible on landing and after workflow completion).
 
 ---
 
@@ -340,7 +324,7 @@ useCopilotChatSuggestions({
 | Strength | Gap |
 |----------|-----|
 | ✅ CopilotKit + AG-UI gives real-time streaming | ✅ G10: Error boundary, banner, slow-run indicator implemented |
-| ✅ QuizCard, OfferCard, QuizDashboard are polished | ❌ G14: Static chat suggestions |
+| ✅ QuizCard, OfferCard, QuizDashboard are polished | ✅ G14: Dynamic chat suggestions via `useConfigureSuggestions` |
 | ✅ Shared state drives UI outside chat panel | ⚠️ No progress indicators during long MCP calls |
 | ✅ WorkflowProgress shows step-by-step execution | |
 

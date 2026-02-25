@@ -16,11 +16,10 @@
  *                         correct component based on args.data.type.
  *                         Replaces the CustomAssistantMessage +
  *                         useCopilotChatInternal workaround (Gap G13).
- *   • useConfigureSuggestions — static (before first message) + dynamic (after
- *                               first message) suggestions.  Fixes Gap G14.
+ *   • useConfigureSuggestions — static suggestions always visible (Gap G14).
  */
 
-import { useEffect, useMemo } from "react";
+import { useEffect } from "react";
 import { z } from "zod";
 import {
   useAgent,
@@ -63,23 +62,6 @@ export default function CertinatorHooks({ onStateChange }: CertinatorHooksProps)
       onStateChange(agentState);
     }
   }, [agentState, onStateChange]);
-
-  // Track conversation history to avoid duplicate suggestions
-  const conversationHistory = useMemo(() => {
-    return agent.messages?.map(m => {
-      const content = m.content;
-      if (typeof content === "string") {
-        return content.toLowerCase();
-      }
-      if (Array.isArray(content)) {
-        return content
-          .map(part => (part.type === "text" ? part.text : ""))
-          .join(" ")
-          .toLowerCase();
-      }
-      return "";
-    }) || [];
-  }, [agent.messages]);
 
   // ------------------------------------------------------------------
   // 2. Tool renderers — replaces useRenderToolCall (v1)
@@ -249,67 +231,26 @@ export default function CertinatorHooks({ onStateChange }: CertinatorHooksProps)
   });
 
   // ------------------------------------------------------------------
-  // 5. Suggestions — static before first message + dynamic after (G14)
+  // 5. Suggestions — static (G14)
   // ------------------------------------------------------------------
 
-  // Static entry-point suggestions — filtered to avoid showing suggestions
-  // for queries that have already been discussed in the conversation.
-  const staticSuggestions = useMemo(() => {
-    const allSuggestions = [
+  useConfigureSuggestions({
+    suggestions: [
       {
         title: "AZ-104 overview",
         message: "Give me an overview of the AZ-104 certification",
-        examCode: "az-104", // Only filter by specific exam code
       },
       {
         title: "AI-900 study plan",
         message:
           "Create a 6-week plan for AI-900 with 1 hour on weekdays and 3 hours on weekends.",
-        examCode: "ai-900",
       },
       {
         title: "AI-102 practice quiz",
         message: "Start a 10-question practice quiz for AI-102.",
-        examCode: "ai-102",
       },
-    ];
-
-    // Filter out suggestions for exams already discussed
-    // Only match on exam code to avoid false positives from generic words
-    if (conversationHistory.length > 1) {
-      return allSuggestions.filter(suggestion => {
-        const examAlreadyDiscussed = conversationHistory.some(msg =>
-          msg.includes(suggestion.examCode)
-        );
-        return !examAlreadyDiscussed;
-      });
-    }
-
-    return allSuggestions;
-  }, [conversationHistory]);
-
-  useConfigureSuggestions({
-    suggestions: staticSuggestions,
+    ],
     available: "always",
-  });
-
-  // Dynamic follow-up suggestions generated after first message.
-  // These provide context-aware next actions based on the conversation state.
-  // NOTE: Removed `providerAgentId` to prevent the agent from being re-triggered
-  // after each run just to generate suggestions (was causing duplicate runs).
-  useConfigureSuggestions({
-    instructions:
-      "Analyze the conversation history and current agent state to suggest relevant next actions. " +
-      "Rules: " +
-      "1. If certification info was just shown, suggest 'Create a study plan' or 'Take a practice quiz'. " +
-      "2. If a study plan was delivered, suggest 'Start practice quiz for [exam]'. " +
-      "3. If quiz results showed weak areas, suggest 'Create focused study plan for [weak topics]'. " +
-      "4. If no quiz is in progress, suggest exploring other certifications. " +
-      "5. Never suggest actions that were just completed in the last 2 messages. " +
-      "6. Suggest specific exam codes (e.g., 'AZ-104', 'AI-900') based on context. " +
-      "Keep suggestions concise (3-5 words) and actionable. Maximum 3 suggestions.",
-    maxSuggestions: 3,
-    available: "after-first-message",
   });
 
   // Renders no DOM — purely registers v2 hooks.

@@ -12,7 +12,7 @@ export default function CopilotKitProvider({ children }: CopilotKitProviderProps
     <CopilotKit
       runtimeUrl="/api/copilotkit"
       agent="my_agent"
-      showDevConsole={true}
+      showDevConsole={process.env.NODE_ENV === "development"}
       onError={(errorEvent) => {
         // Development error logging
         console.error("[CopilotKit Error]", {
