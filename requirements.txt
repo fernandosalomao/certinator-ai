@@ -3,9 +3,16 @@
 # =============================================================================
 # Pin versions to avoid breaking changes while Agent Framework is in preview.
 
-# Microsoft Agent Framework (core + Azure AI integration)
+# Microsoft Agent Framework (core + Azure AI)
 agent-framework-core==1.0.0b260107
 agent-framework-azure-ai==1.0.0b260107
+
+# FoundryLocal SDK (for local LLM inference)
+# Only needed if LLM_PROVIDER=local
+foundry-local-sdk
+
+# Note: GitHub Models (LLM_PROVIDER=github) uses OpenAIChatClient from
+# agent-framework-core — no extra dependencies needed, just set GITHUB_TOKEN.
 
 # HTTP server wrapper
 azure-ai-agentserver-core==1.0.0b10
@@ -35,6 +42,8 @@ tenacity>=8.2.0
 
 # OpenTelemetry tracing (gRPC exporter for AI Toolkit)
 opentelemetry-exporter-otlp-proto-grpc
+# Pin semantic conventions to avoid breaking changes with LLM_REQUEST_MODEL
+opentelemetry-semantic-conventions-ai==0.4.13
 
 # Evaluation framework (Azure AI Evaluation SDK)
 azure-ai-evaluation

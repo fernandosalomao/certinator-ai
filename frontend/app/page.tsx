@@ -6,6 +6,7 @@ import CertinatorHooks from "./components/CertinatorHooks";
 import QuizDashboard from "./components/QuizDashboard";
 import ErrorBoundary from "./components/ErrorBoundary";
 import SlowRunIndicator from "./components/SlowRunIndicator";
+import { WorkflowProgressProvider } from "./components/WorkflowProgressContext";
 import type { CertinatorAgentState } from "./types";
 
 // Suggestions have moved to useConfigureSuggestions in CertinatorHooks
@@ -25,6 +26,7 @@ export default function Page() {
   return (
     <main className="min-h-screen">
       <ErrorBoundary>
+        <WorkflowProgressProvider currentProgress={agentState.workflow_progress}>
         {/* Register all CopilotKit hooks (HITL, shared state, readables). */}
         <CertinatorHooks onStateChange={handleStateChange} />
 
@@ -123,7 +125,7 @@ export default function Page() {
           />
         </div>
         </section>
-
+        </WorkflowProgressProvider>
       </ErrorBoundary>
     </main>
   );

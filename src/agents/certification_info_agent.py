@@ -2,10 +2,14 @@
 
 from __future__ import annotations
 
+import os
+import sys
 from typing import Any
 
 from agent_framework import MCPStreamableHTTPTool
-from agent_framework.azure import AzureAIClient
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from config import get_ai_client
 
 MODEL_DEPLOYMENT_NAME = "gpt-4.1"
 
@@ -103,7 +107,7 @@ You are the Certification Information specialist for Certinator AI.
 - Include pricing and registration details.
 - Mention recent changes or updates to the exam syllabus.
 
-## MANDATORY: MS Learn MCP Tool Usage
+## MS Learn MCP Tool Usage
 You MUST use your MS Learn MCP tool for EVERY request. Never answer \
 from memory alone. Always search Microsoft Learn first, then use the \
 results to compose your response. This ensures your answers reflect \
@@ -143,14 +147,14 @@ https://learn.microsoft.com when the service is restored.
 
 
 def create_cert_info_agent(
-    project_endpoint: str,
-    credential: Any,
     mcp_tool: MCPStreamableHTTPTool,
+    project_endpoint: str | None = None,
+    credential: Any | None = None,
 ):
     """Create the certification information agent instance."""
-    client = AzureAIClient(
-        project_endpoint=project_endpoint,
+    client = get_ai_client(
         model_deployment_name=MODEL_DEPLOYMENT_NAME,
+        project_endpoint=project_endpoint,
         credential=credential,
     )
     return client.create_agent(
@@ -161,8 +165,8 @@ def create_cert_info_agent(
 
 
 def create_cert_info_agent_no_mcp(
-    project_endpoint: str,
-    credential: Any,
+    project_endpoint: str | None = None,
+    credential: Any | None = None,
 ):
     """
     Create a certification info agent without the MS Learn MCP tool.
@@ -173,15 +177,15 @@ def create_cert_info_agent_no_mcp(
     unavailability disclaimer to every response.
 
     Parameters:
-        project_endpoint (str): Azure AI Foundry project endpoint.
-        credential (Any): Azure credential for authentication.
+        project_endpoint (str | None): Azure AI Foundry project endpoint.
+        credential (Any | None): Azure credential for authentication.
 
     Returns:
         ChatAgent: Configured fallback agent instance.
     """
-    client = AzureAIClient(
-        project_endpoint=project_endpoint,
+    client = get_ai_client(
         model_deployment_name=MODEL_DEPLOYMENT_NAME,
+        project_endpoint=project_endpoint,
         credential=credential,
     )
     return client.create_agent(

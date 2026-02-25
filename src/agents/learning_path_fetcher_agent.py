@@ -2,10 +2,14 @@
 
 from __future__ import annotations
 
+import os
+import sys
 from typing import Any
 
 from agent_framework import MCPStreamableHTTPTool
-from agent_framework.azure import AzureAIClient
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from config import get_ai_client
 
 MODEL_DEPLOYMENT_NAME = "gpt-4.1"
 
@@ -136,14 +140,14 @@ Return data that matches the configured structured response schema.
 
 
 def create_learning_path_fetcher_agent(
-    project_endpoint: str,
-    credential: Any,
     mcp_tool: MCPStreamableHTTPTool,
+    project_endpoint: str | None = None,
+    credential: Any | None = None,
 ):
     """Create the learning path fetcher agent instance."""
-    client = AzureAIClient(
-        project_endpoint=project_endpoint,
+    client = get_ai_client(
         model_deployment_name=MODEL_DEPLOYMENT_NAME,
+        project_endpoint=project_endpoint,
         credential=credential,
     )
     return client.create_agent(

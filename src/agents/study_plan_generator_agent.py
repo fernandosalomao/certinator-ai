@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import os
+import sys
 from typing import Any
 
-from agent_framework.azure import AzureAIClient
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from config import get_ai_client
 
 MODEL_DEPLOYMENT_NAME = "gpt-4.1"
 
@@ -159,14 +162,14 @@ never do the arithmetic yourself.
 
 
 def create_study_plan_agent(
-    project_endpoint: str,
-    credential: Any,
     schedule_study_plan_tool: Any,
+    project_endpoint: str | None = None,
+    credential: Any | None = None,
 ):
     """Create the study plan agent instance."""
-    client = AzureAIClient(
-        project_endpoint=project_endpoint,
+    client = get_ai_client(
         model_deployment_name=MODEL_DEPLOYMENT_NAME,
+        project_endpoint=project_endpoint,
         credential=credential,
     )
     return client.create_agent(

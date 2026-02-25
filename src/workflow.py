@@ -60,6 +60,7 @@ from agents import (
 )
 from config import (
     FOUNDRY_PROJECT_ENDPOINT,
+    LLM_PROVIDER,
 )
 from executors.certification_info_executor import CertificationInfoExecutor
 from executors.coordinator_executor import CoordinatorExecutor
@@ -199,50 +200,60 @@ async def build_workflow():
         tuple: ``(workflow_agent, credential)`` — the workflow wrapped
         as an agent for HTTP serving, plus the credential for cleanup.
     """
-    credential = DefaultAzureCredential()
+    # Azure credential is only needed when using Azure AI Foundry
+    use_azure = LLM_PROVIDER == "azure"
+    credential = DefaultAzureCredential() if use_azure else None
+    project_endpoint = FOUNDRY_PROJECT_ENDPOINT if use_azure else None
+
+    if LLM_PROVIDER == "github":
+        logger.info("Using GitHub Models for LLM inference")
+    elif LLM_PROVIDER == "local":
+        logger.info("Using FoundryLocal for local LLM inference")
+    else:
+        logger.info("Using Azure AI Foundry for cloud LLM inference")
 
     # ── Create agents ─────────────────────────────────────────────────
     coordinator_agent = create_coordinator_agent(
-        FOUNDRY_PROJECT_ENDPOINT,
-        credential,
+        project_endpoint=project_endpoint,
+        credential=credential,
     )
 
     # CertificationInfoAgent with MS Learn MCP tool (client-side for Inspector visibility)
     mcp_tool = create_ms_learn_mcp_tool()
     cert_info_agent = create_cert_info_agent(
-        FOUNDRY_PROJECT_ENDPOINT,
-        credential,
-        mcp_tool,
+        mcp_tool=mcp_tool,
+        project_endpoint=project_endpoint,
+        credential=credential,
     )
 
     # Fallback agent: no MCP — used when learn.microsoft.com/api/mcp is down
     cert_info_fallback_agent = create_cert_info_agent_no_mcp(
-        FOUNDRY_PROJECT_ENDPOINT,
-        credential,
+        project_endpoint=project_endpoint,
+        credential=credential,
     )
 
     # LearningPathFetcher agent: uses MCP to retrieve structured topic data
     learning_path_agent = create_learning_path_fetcher_agent(
-        FOUNDRY_PROJECT_ENDPOINT,
-        credential,
-        mcp_tool,
+        mcp_tool=mcp_tool,
+        project_endpoint=project_endpoint,
+        credential=credential,
     )
 
     # StudyPlanGeneratorAgent: uses math tool only — NO MCP (data comes from fetcher)
     study_plan_agent = create_study_plan_agent(
-        FOUNDRY_PROJECT_ENDPOINT,
-        credential,
-        schedule_study_plan,
+        schedule_study_plan_tool=schedule_study_plan,
+        project_endpoint=project_endpoint,
+        credential=credential,
     )
 
     practice_agent = create_practice_agent(
-        FOUNDRY_PROJECT_ENDPOINT,
-        credential,
+        project_endpoint=project_endpoint,
+        credential=credential,
     )
 
     critic_agent = create_critic_agent(
-        FOUNDRY_PROJECT_ENDPOINT,
-        credential,
+        project_endpoint=project_endpoint,
+        credential=credential,
     )
 
     # ── Instantiate executors ─────────────────────────────────────────

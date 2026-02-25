@@ -1,12 +1,11 @@
 "use client";
 
 import type { WorkflowProgress as WorkflowProgressState } from "../types";
+import { useWorkflowProgress } from "./WorkflowProgressContext";
 
 type WorkflowStepProps = {
   /** State snapshot captured when this step was emitted. */
   progress: WorkflowProgressState;
-  /** Live agent state — used to decide if this step has been superseded. */
-  currentProgress?: WorkflowProgressState;
 };
 
 function CheckIcon() {
@@ -55,7 +54,10 @@ function SpinnerIcon() {
  *   • the overall workflow has completed (liveStatus === "completed"), OR
  *   • a later step has advanced past this one (liveStep > thisStep)
  */
-export default function WorkflowProgress({ progress, currentProgress }: WorkflowStepProps) {
+export default function WorkflowProgress({ progress }: WorkflowStepProps) {
+  // Get live state from context for reactive updates
+  const { currentProgress } = useWorkflowProgress();
+  
   if (!progress?.route) return null;
 
   const liveStatus = currentProgress?.status ?? progress.status;

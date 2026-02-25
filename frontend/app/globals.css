@@ -137,6 +137,75 @@ body {
   box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.2);
 }
 
+/* ── Reduce spacing for horizontal separators (hr) in assistant messages ── */
+.dark [data-copilotkit] .certinator-assistant-msg hr,
+.dark [data-copilotkit] .certinator-assistant-msg [role="separator"] {
+  margin: 0.75rem 0 !important;
+  padding: 0 !important;
+  border: 0;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  opacity: 0.5;
+  height: 0;
+}
+
+/* ── Reduce spacing between headings and content ── */
+.dark [data-copilotkit] .certinator-assistant-msg h1,
+.dark [data-copilotkit] .certinator-assistant-msg h2,
+.dark [data-copilotkit] .certinator-assistant-msg h3 {
+  margin-top: 1rem !important;
+  margin-bottom: 0.5rem !important;
+}
+
+/* ── First heading should have no top margin ── */
+.dark [data-copilotkit] .certinator-assistant-msg h1:first-child,
+.dark [data-copilotkit] .certinator-assistant-msg h2:first-child,
+.dark [data-copilotkit] .certinator-assistant-msg h3:first-child,
+.dark [data-copilotkit] .certinator-assistant-msg > div:first-child h1,
+.dark [data-copilotkit] .certinator-assistant-msg > div:first-child h2,
+.dark [data-copilotkit] .certinator-assistant-msg > div:first-child h3 {
+  margin-top: 0 !important;
+}
+
+/* ── Reduce paragraph spacing ── */
+.dark [data-copilotkit] .certinator-assistant-msg p {
+  margin-bottom: 0.5rem !important;
+}
+
+.dark [data-copilotkit] .certinator-assistant-msg p:last-child {
+  margin-bottom: 0 !important;
+}
+
+/* ── Reduce list spacing ── */
+.dark [data-copilotkit] .certinator-assistant-msg ul,
+.dark [data-copilotkit] .certinator-assistant-msg ol {
+  margin-top: 0.5rem !important;
+  margin-bottom: 0.5rem !important;
+  padding-left: 1.25rem !important;
+}
+
+.dark [data-copilotkit] .certinator-assistant-msg li {
+  margin-bottom: 0.25rem !important;
+}
+
+/* ── Override CopilotKit/prose excessive spacing ── */
+.dark [data-copilotkit] .certinator-assistant-msg .prose,
+.dark [data-copilotkit] .certinator-assistant-msg [class*="prose"] {
+  --tw-prose-body: inherit;
+  line-height: 1.6;
+}
+
+.dark [data-copilotkit] .certinator-assistant-msg .prose hr,
+.dark [data-copilotkit] .certinator-assistant-msg [class*="prose"] hr {
+  margin-top: 0.75rem !important;
+  margin-bottom: 0.75rem !important;
+}
+
+.dark [data-copilotkit] .certinator-assistant-msg .prose h2,
+.dark [data-copilotkit] .certinator-assistant-msg [class*="prose"] h2 {
+  margin-top: 1rem !important;
+  margin-bottom: 0.5rem !important;
+}
+
 /* ── User message bubble — primary-accent gradient ───────────────── */
 .dark [data-copilotkit] .certinator-user-bubble {
   background: linear-gradient(
@@ -803,13 +872,19 @@ body {
 
 /* Done */
 .workflow-progress__step--done {
-  color: #6ee7b7;
-  background: rgba(16, 185, 129, 0.1);
+  color: rgba(255, 255, 255, 0.95);
+  background: rgba(16, 185, 129, 0.12);
   border-color: rgba(16, 185, 129, 0.3);
 }
 .workflow-progress__step--done .workflow-progress__step-icon-wrap {
   background: linear-gradient(135deg, #10b981, #059669);
   box-shadow: 0 0 8px rgba(16, 185, 129, 0.35);
+}
+.workflow-progress__step--done .workflow-progress__step-text {
+  color: rgba(255, 255, 255, 0.95);
+}
+.workflow-progress__step--done .workflow-progress__step-reasoning {
+  color: rgba(255, 255, 255, 0.6);
 }
 
 /* Active */
