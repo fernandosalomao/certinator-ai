@@ -28,9 +28,9 @@ def get_project_client() -> AIProjectClient:
     Raises:
         SystemExit: If FOUNDRY_PROJECT_ENDPOINT is not configured.
     """
-    endpoint = os.getenv("FOUNDRY_PROJECT_ENDPOINT", "")
+    endpoint = os.getenv("LLM_ENDPOINT", "")
     if not endpoint:
-        print("Error: FOUNDRY_PROJECT_ENDPOINT is not set in .env")
+        print("Error: LLM_ENDPOINT is not set in .env")
         sys.exit(1)
 
     credential = DefaultAzureCredential()

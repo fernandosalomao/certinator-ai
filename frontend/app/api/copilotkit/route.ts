@@ -10,10 +10,9 @@ import { NextRequest } from "next/server";
 //    the empty adapter since we're only using one agent.
 const serviceAdapter = new ExperimentalEmptyAdapter();
 
-const agentUrl =
-  process.env.CERTINATOR_AGENT_URL ||
-  process.env.AGENT_URL ||
-  "http://127.0.0.1:8000/";
+const agentHost = process.env.AGUI_HOST ?? "127.0.0.1";
+const agentPort = process.env.AGUI_PORT ?? "8000";
+const agentUrl = `http://${agentHost}:${agentPort}/`;
 
 // 2. Create the CopilotRuntime instance and utilize the Microsoft Agent Framework
 //    AG-UI integration to setup the connection.

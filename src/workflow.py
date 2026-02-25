@@ -33,6 +33,7 @@ Graph topology::
 """
 
 import logging
+import os
 from typing import Any
 
 from agent_framework import (
@@ -59,6 +60,7 @@ from agents import (
     create_study_plan_agent,
 )
 from config import (
+    GENERATE_WORKFLOW_VISUALIZATION,
     LLM_ENDPOINT,
     LLM_PROVIDER,
 )
@@ -154,6 +156,45 @@ def _is_study_plan_from_quiz(msg: Any) -> bool:
         bool: True if the message is a StudyPlanFromQuizRequest.
     """
     return isinstance(msg, StudyPlanFromQuizRequest)
+
+
+# ── Workflow visualization ───────────────────────────────────────────────
+
+# Project root: one level above the ``src/`` directory.
+_PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+
+def _generate_workflow_visualization(workflow: Any) -> None:
+    """Generate and persist workflow visualizations when the feature flag is on.
+
+    Prints the Mermaid and DiGraph string representations to stdout and
+    exports an SVG file to the project root as ``workflow.svg``.
+
+    Requires **graphviz** to be installed:
+        - macOS:  ``brew install graphviz``
+        - Debian: ``apt-get install graphviz``
+
+    Parameters:
+        workflow: The built workflow instance returned by
+            :meth:`WorkflowBuilder.build`.
+    """
+    print("Generating workflow visualization...")
+    viz = WorkflowViz(workflow)
+
+    # Print Mermaid representation.
+    print("Mermaid string: \n=======")
+    print(viz.to_mermaid())
+    print("=======")
+
+    # Print DiGraph representation (including internal executors).
+    print("DiGraph string: \n=======")
+    print(viz.to_digraph(include_internal_executors=True))
+    print("=======")
+
+    # Export the DiGraph visualization as an SVG at the project root.
+    svg_path = os.path.join(_PROJECT_ROOT, "workflow.svg")
+    svg_file = viz.export(filename=svg_path, format="svg")
+    print(f"SVG file saved to: {svg_file}")
 
 
 # ── General-response handler (function-based executor) ────────────────────
@@ -336,21 +377,8 @@ async def build_workflow():
         .build()
     )
 
-    # Generate workflow visualization
-    print("Generating workflow visualization...")
-    viz = WorkflowViz(workflow)
-    # Print out the mermaid string.
-    print("Mermaid string: \n=======")
-    print(viz.to_mermaid())
-    print("=======")
-    # Print out the DiGraph string with internal executors.
-    print("DiGraph string: \n=======")
-    print(viz.to_digraph(include_internal_executors=True))
-    print("=======")
-
-    # Export the DiGraph visualization as SVG.
-    svg_file = viz.export(filename="workflow.svg", format="svg")
-    print(f"SVG file saved to: {svg_file}")
+    if GENERATE_WORKFLOW_VISUALIZATION:
+        _generate_workflow_visualization(workflow)
 
     # Wrap as an agent for HTTP serving
     agent = workflow.as_agent()

@@ -585,10 +585,12 @@ async def run_agui() -> None:
         ],
     )
 
+    from config import AGUI_HOST, AGUI_PORT
+
     app = FastAPI(title="Microsoft Agent Framework (Python) - Quickstart")
     add_agent_framework_fastapi_endpoint(app=app, agent=ag_agent, path="/")
 
-    config = uvicorn.Config(app=app, host="0.0.0.0", port=8000)
+    config = uvicorn.Config(app=app, host=AGUI_HOST, port=AGUI_PORT)
     server = uvicorn.Server(config=config)
 
     try:

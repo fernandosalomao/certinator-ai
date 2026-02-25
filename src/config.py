@@ -79,6 +79,20 @@ LLM_MODEL_STUDY_PLAN_GENERATOR: str = os.getenv(
 # Default number of practice questions per quiz session.
 DEFAULT_PRACTICE_QUESTIONS: int = int(os.getenv("DEFAULT_PRACTICE_QUESTIONS", "10"))
 
+# Generate a workflow visualization (Mermaid + SVG) on startup.
+# Requires graphviz to be installed: https://graphviz.org/download/
+#   macOS:  brew install graphviz
+#   Debian: apt-get install graphviz
+GENERATE_WORKFLOW_VISUALIZATION: bool = (
+    os.getenv("GENERATE_WORKFLOW_VISUALIZATION", "false").lower() == "true"
+)
+
+# ── AG-UI Server ──────────────────────────────────────────────────────────
+# Host and port for the AG-UI FastAPI server.
+# Use 0.0.0.0 to listen on all interfaces (e.g. in Docker / production).
+AGUI_HOST: str = os.getenv("AGUI_HOST", "127.0.0.1")
+AGUI_PORT: int = int(os.getenv("AGUI_PORT", "8000"))
+
 
 # ── FoundryLocal Connection ───────────────────────────────────────────────
 @dataclass
