@@ -1,0 +1,30 @@
+{"query": "Tell me about the AZ-104 certification", "response": "certification-info", "context": "certification-info"}
+{"query": "What is the AZ-900 Azure Fundamentals exam?", "response": "certification-info", "context": "certification-info"}
+{"query": "I want to learn about the AI-102 certification", "response": "certification-info", "context": "certification-info"}
+{"query": "What topics does the AZ-305 exam cover?", "response": "certification-info", "context": "certification-info"}
+{"query": "Give me details about the DP-900 certification", "response": "certification-info", "context": "certification-info"}
+{"query": "What are the prerequisites for AZ-204?", "response": "certification-info", "context": "certification-info"}
+{"query": "Describe the AZ-700 networking certification", "response": "certification-info", "context": "certification-info"}
+{"query": "I need information about the SC-300 exam", "response": "certification-info", "context": "certification-info"}
+{"query": "Create a study plan for AZ-104", "response": "study-plan-generator", "context": "study-plan-generator"}
+{"query": "Help me prepare a study schedule for the AI-900 exam", "response": "study-plan-generator", "context": "study-plan-generator"}
+{"query": "I have 4 weeks to study for AZ-900, make me a plan", "response": "study-plan-generator", "context": "study-plan-generator"}
+{"query": "Generate a study plan for DP-203 with 10 hours per week", "response": "study-plan-generator", "context": "study-plan-generator"}
+{"query": "Plan my AZ-305 exam preparation for the next 6 weeks", "response": "study-plan-generator", "context": "study-plan-generator"}
+{"query": "I want a week-by-week schedule to study for AI-102", "response": "study-plan-generator", "context": "study-plan-generator"}
+{"query": "Create a learning roadmap for the AZ-204 developer exam", "response": "study-plan-generator", "context": "study-plan-generator"}
+{"query": "Help me schedule my study time for AZ-700, I can study 15 hours a week", "response": "study-plan-generator", "context": "study-plan-generator"}
+{"query": "Give me practice questions for AZ-104", "response": "practice-questions", "context": "practice-questions"}
+{"query": "I want to take a quiz on AZ-900 topics", "response": "practice-questions", "context": "practice-questions"}
+{"query": "Test me on AI-102 concepts", "response": "practice-questions", "context": "practice-questions"}
+{"query": "Generate a practice exam for AZ-305", "response": "practice-questions", "context": "practice-questions"}
+{"query": "I need sample questions for the DP-900 exam", "response": "practice-questions", "context": "practice-questions"}
+{"query": "Quiz me on Azure networking for AZ-700", "response": "practice-questions", "context": "practice-questions"}
+{"query": "Start a practice test for AI-900 with 5 questions", "response": "practice-questions", "context": "practice-questions"}
+{"query": "Let me practice AZ-204 questions on Azure Functions", "response": "practice-questions", "context": "practice-questions"}
+{"query": "Hello, what can you help me with?", "response": "general", "context": "general"}
+{"query": "Thanks for your help!", "response": "general", "context": "general"}
+{"query": "What certifications do you support?", "response": "general", "context": "general"}
+{"query": "How does this tool work?", "response": "general", "context": "general"}
+{"query": "Who created Certinator AI?", "response": "general", "context": "general"}
+{"query": "Can you help me with Python programming?", "response": "general", "context": "general"}

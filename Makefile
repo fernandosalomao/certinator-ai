@@ -4,7 +4,7 @@
 # Quick start commands for development and testing.
 # Run `make help` to see all available commands.
 
-.PHONY: help install dev start stop backend frontend clean check-node
+.PHONY: help install dev start stop backend frontend clean check-node eval test
 
 # Minimum Node.js version required
 MIN_NODE_VERSION := 20.9.0
@@ -27,6 +27,11 @@ help:
 	@echo "  make clean       Remove virtual environment and node_modules"
 	@echo "  make logs        Tail the backend server logs"
 	@echo "  make check-node  Verify Node.js version"
+	@echo ""
+	@echo "Evaluation:"
+	@echo "  make eval        Run the full evaluation pipeline"
+	@echo "  make eval-custom Run custom evaluators only (no Azure AI SDK)"
+	@echo "  make test        Run all unit tests"
 	@echo ""
 	@echo "Prerequisites:"
 	@echo "  - Python 3.10+"
@@ -132,3 +137,22 @@ clean:
 	@rm -rf frontend/.next
 	@rm -f certinator_server.log
 	@echo "✓ Cleaned up. Run 'make install' to reinstall dependencies."
+
+# =============================================================================
+# Evaluation & Testing
+# =============================================================================
+
+# Run the full evaluation pipeline (custom + SDK built-in evaluators)
+eval:
+	@echo "Running Certinator AI evaluation pipeline..."
+	@.venv/bin/python -m evaluations --run
+
+# Run only custom evaluators (no Azure AI SDK / LLM dependency)
+eval-custom:
+	@echo "Running custom evaluators only..."
+	@.venv/bin/python -m evaluations --run --no-builtin
+
+# Run all unit tests
+test:
+	@echo "Running unit tests..."
+	@.venv/bin/python -m pytest tests/ -v
