@@ -485,22 +485,34 @@ class RequestInfoOrchestrator(Orchestrator):
 # Persistent Default Orchestrator
 # ---------------------------------------------------------------------------
 class PersistentDefaultOrchestrator(DefaultOrchestrator):
-    """DefaultOrchestrator wrapper that logs thread info.
+    """DefaultOrchestrator wrapper that fixes message ordering.
 
-    Note: Full thread persistence for DefaultOrchestrator flows requires
-    deeper SDK integration. Thread persistence currently works for:
-    - HITL responses (RequestInfoOrchestrator._run_with_pending)
+    The parent ``DefaultOrchestrator`` emits a final
+    ``MessagesSnapshotEvent`` that places tool-call messages
+    **before** the assistant text message.  When the AG-UI client
+    receives this snapshot it replaces its entire messages array,
+    causing HITL tool calls (e.g. OfferCard rendered via
+    ``request_info``) to appear *above* the preceding text content
+    instead of below it.
 
-    For initial user messages, each request still creates a fresh thread.
-    This is acceptable because CopilotKit maintains conversation history
-    client-side and sends the full history on each request.
+    This subclass suppresses that trailing snapshot so the correct
+    rendering order established by the streaming events
+    (``TextMessageStartEvent`` → ``ToolCallStartEvent``) is
+    preserved.
+
+    Note: Full thread persistence for DefaultOrchestrator flows
+    requires deeper SDK integration.  Thread persistence currently
+    works for HITL responses
+    (``RequestInfoOrchestrator._run_with_pending``).
     """
 
     async def run(
         self,
         context: ExecutionContext,
     ) -> AsyncGenerator[BaseEvent, None]:
-        """Delegate to parent DefaultOrchestrator, with logging."""
+        """Delegate to parent, suppressing the final MessagesSnapshotEvent."""
+        from ag_ui.core import MessagesSnapshotEvent
+
         logger.info(
             "PersistentDefaultOrchestrator: delegating to DefaultOrchestrator "
             "for thread_id=%s, run_id=%s",
@@ -511,6 +523,22 @@ class PersistentDefaultOrchestrator(DefaultOrchestrator):
         _ = get_or_create_thread(context.thread_id, context.run_id)
 
         async for event in super().run(context):
+            if isinstance(event, MessagesSnapshotEvent):
+                # The snapshot built by DefaultOrchestrator places
+                # the tool-call message (containing request_info)
+                # BEFORE the assistant text message.  This overwrites
+                # the correct streaming order and makes the OfferCard
+                # render "on top" of the study-plan text.  Suppress
+                # it — the AG-UI client already has the correct
+                # message order from the streaming events, and
+                # CopilotKit sends the full history on every turn.
+                logger.info(
+                    "PersistentDefaultOrchestrator: suppressing "
+                    "MessagesSnapshotEvent to preserve streaming "
+                    "message order (%d messages in snapshot)",
+                    len(event.messages) if event.messages else 0,
+                )
+                continue
             yield event
 
 
