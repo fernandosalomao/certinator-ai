@@ -45,7 +45,7 @@ Gap analysis comparing the current implementation against the [project requireme
 | **External tools, APIs, MCP** integration | ✅ Implemented | MS Learn MCP, `schedule_study_plan` @ai_function, `score_quiz` Python tool | G3 (LPF fallback), G18 (MCP caching) |
 | **Demoable** with clear agent interactions | ✅ Implemented | CopilotKit chat UI, workflow progress rendering, quiz cards, offer cards | G14 (accessibility) |
 | **Clear documentation** — agent roles, reasoning flow, tool integrations | ✅ Implemented | ARCHITECTURE.md with Mermaid diagrams, workflow.svg, inline docstrings | — |
-| **Evaluations, telemetry, monitoring** | ⚠️ Partial | OTel tracing, custom metrics (8 instruments), **end-to-end evaluation pipeline (5 custom evaluators, JSONL datasets, CLI orchestrator)** | G6, G10 |
+| **Evaluations, telemetry, monitoring** | ⚠️ Partial | OTel tracing, custom metrics (8 instruments), **end-to-end evaluation pipeline (6 custom evaluators, JSONL datasets, CLI orchestrator)**, **Critic calibration evaluation (precision/recall/F1)** | G10 |
 | **Advanced reasoning patterns** (planner-executor, critics, reflection loops) | ✅ Implemented | All four patterns implemented | G7 (CoT for routing) |
 | **Responsible AI** (guardrails, validation, fallbacks) | ✅ Implemented | Critic gate, structured output, deterministic scoring, MCP fallback (CertInfo only), bounded loops, **InputGuardExecutor (regex-based)**, **Output content safety in CriticExecutor** | G3, G11, G12 |
 
@@ -55,7 +55,7 @@ Gap analysis comparing the current implementation against the [project requireme
 
 | Criterion | Score | Strengths | Gaps |
 |-----------|-------|-----------|------|
-| **Accuracy & Relevance** | Strong | MCP-grounded retrieval, structured output, critic validation, deterministic scoring | G10 (Groundedness evaluation), G6 (Critic calibration) |
+| **Accuracy & Relevance** | Strong | MCP-grounded retrieval, structured output, critic validation, deterministic scoring, **Critic calibration evaluation (G6)** | G10 (Groundedness evaluation) |
 | **Reasoning & Multi-step Thinking** | Strong | 5 reasoning patterns, typed message graph, conditional routing, revision loops | G7 (CoT audit trail for Coordinator) |
 | **Creativity & Originality** | Strong | Cross-route bidirectional flows (Practice ↔ StudyPlan), deterministic math offloading, dual-mode Practice agent, MCP fallback with disclaimer | — |
 | **User Experience & Presentation** | Good | CopilotKit v2 HITL, inline workflow progress, quiz session UI, offer cards | G13 (dynamic suggestions), G14 (accessibility), G17 (streaming) |
@@ -213,15 +213,31 @@ flowchart LR
 | **Effort** | Medium (2-3 days) |
 | **Requirement** | Evaluations |
 | **Criterion** | Accuracy & Relevance |
+| **Status** | ✅ **Implemented** |
 
-**Current state:** The Critic agent is running in production with no measurement of its accuracy. The `certinator.critic.verdicts` metric tracks PASS/FAIL counts but not whether those verdicts are _correct_.
+**Implementation:** Critic calibration evaluation in `evaluations/evaluators/critic_calibration.py` with a 50-record golden dataset and aggregate confusion-matrix metrics.
 
-**Gap:** No evaluation of critic accuracy — false positive rate (FAILs good content) and false negative rate (PASSes bad content) are unknown.
+**What was built:**
+- **`CriticCalibrationEvaluator`** — compares Critic PASS/FAIL verdicts against human-annotated GOOD/BAD labels on specialist outputs
+- **Golden dataset** (`evaluations/datasets/critic_calibration.jsonl`) — 50 human-annotated records covering:
+  - 20 true positives (PASS on GOOD content)
+  - 15 true negatives (FAIL on BAD content)
+  - 8 false positives (PASS on BAD content — critic missed issues)
+  - 7 false negatives (FAIL on GOOD content — critic too strict)
+- **Aggregate metrics** computed by the orchestrator:
+  - **Precision**: reliability of PASS verdicts (TP / (TP + FP))
+  - **Recall**: coverage of GOOD content (TP / (TP + FN))
+  - **F1**: harmonic mean of precision and recall
+  - **Accuracy**: overall correct verdicts ((TP + TN) / total)
+  - **Confidence MAE**: mean absolute error between stated confidence and actual correctness
+  - **Confusion matrix**: full TP/TN/FP/FN breakdown
+- **CLI output** — critic calibration metrics displayed in `python -m evaluations --run` output
+- **11 unit tests** in `tests/test_evaluation.py` — all passing
 
-**Recommended approach:**
-- Create a "golden" dataset of ~50 specialist outputs, each labeled as GOOD or BAD by a human annotator
-- Run the Critic agent on each and measure: precision, recall, F1, and confidence calibration
-- Track regression over prompt changes using Azure AI Evaluation comparison reports
+**How to track regression:**
+- Run `make eval` or `python -m evaluations --run` after prompt changes
+- Compare precision/recall/F1 across runs using saved JSON results in `evaluations/results/`
+- F1 drop > 5% after a prompt change indicates critic calibration regression
 
 ---
 
@@ -544,7 +560,7 @@ flowchart LR
 
 | ID | Gap | Effort | Requirement |
 |----|-----|--------|-------------|
-| G6 | Critic Calibration Evaluation | Medium | Evaluations |
+| ~~G6~~ | ~~Critic Calibration Evaluation~~ | ~~Medium~~ | ✅ **Implemented** |
 | G7 | Coordinator CoT Reasoning Field | Low | Reasoning |
 | G8 | Persistent Thread Store | Medium | Production Readiness |
 | G9 | Health Check Endpoints | Low | Production Readiness |
@@ -576,10 +592,10 @@ flowchart LR
 | External tools, APIs, MCP | ✅ MS Learn MCP, schedule tool, score tool | G3, G18, G20 |
 | Demoable experience | ✅ CopilotKit chat, HITL cards, progress | G14, G17 |
 | Clear documentation | ✅ ARCHITECTURE.md, workflow.svg, docstrings | — |
-| Evaluations & telemetry | ⚠️ OTel tracing + 8 custom metrics (implemented), **E2E evaluation pipeline (5 evaluators, JSONL datasets, CLI)** | G6, G10 |
+| Evaluations & telemetry | ⚠️ OTel tracing + 8 custom metrics (implemented), **E2E evaluation pipeline (6 evaluators, JSONL datasets, CLI)**, **Critic calibration (precision/recall/F1)** | G10 |
 | Responsible AI | ✅ Critic gate, structured output, deterministic scoring, MCP fallback (CertInfo only), bounded loops, **InputGuardExecutor**, **Output content safety gate** | G3, G4, G11, G12, G19, G20 |
 | Planner-Executor | ✅ Coordinator → specialists | — |
-| Critic / Verifier | ✅ CriticExecutor with structured verdict + **output content safety gate** | G6 |
+| Critic / Verifier | ✅ CriticExecutor with structured verdict + **output content safety gate** + **calibration evaluation** | — |
 | Self-reflection & Iteration | ✅ Revision loop with feedback | — |
 | Role-based specialization | ✅ 6 distinct agent roles | — |
 

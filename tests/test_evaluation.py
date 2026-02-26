@@ -13,6 +13,7 @@ import pytest
 from evaluations.evaluation import evaluate_single_response
 from evaluations.evaluators import (
     ContentSafetyEvaluator,
+    CriticCalibrationEvaluator,
     ExamContentAccuracyEvaluator,
     QuizQualityEvaluator,
     RoutingAccuracyEvaluator,
@@ -453,6 +454,133 @@ class TestContentSafetyEvaluator:
         evaluator = ContentSafetyEvaluator()
         result = evaluator(response="You can bypass the quiz scoring system.")
         assert result["content_safety_score"] == 1
+
+
+# =====================================================================
+# CriticCalibrationEvaluator
+# =====================================================================
+
+
+class TestCriticCalibrationEvaluator:
+    """Tests for the critic calibration evaluator."""
+
+    def test_true_positive_scores_5(self):
+        """PASS verdict on GOOD content should score 5 (true positive)."""
+        evaluator = CriticCalibrationEvaluator()
+        verdict = json.dumps(
+            {"verdict": "PASS", "confidence": 90, "issues": [], "suggestions": []}
+        )
+        result = evaluator(response=verdict, context="GOOD")
+        assert result["critic_calibration_score"] == 5
+        assert result["critic_calibration_match"] is True
+        assert result["critic_calibration_category"] == "true_positive"
+
+    def test_true_negative_scores_5(self):
+        """FAIL verdict on BAD content should score 5 (true negative)."""
+        evaluator = CriticCalibrationEvaluator()
+        verdict = json.dumps(
+            {
+                "verdict": "FAIL",
+                "confidence": 85,
+                "issues": ["Missing sections"],
+                "suggestions": [],
+            }
+        )
+        result = evaluator(response=verdict, context="BAD")
+        assert result["critic_calibration_score"] == 5
+        assert result["critic_calibration_match"] is True
+        assert result["critic_calibration_category"] == "true_negative"
+
+    def test_false_positive_scores_1(self):
+        """PASS verdict on BAD content should score 1 (false positive)."""
+        evaluator = CriticCalibrationEvaluator()
+        verdict = json.dumps(
+            {"verdict": "PASS", "confidence": 70, "issues": [], "suggestions": []}
+        )
+        result = evaluator(response=verdict, context="BAD")
+        assert result["critic_calibration_score"] == 1
+        assert result["critic_calibration_match"] is False
+        assert result["critic_calibration_category"] == "false_positive"
+
+    def test_false_negative_scores_1(self):
+        """FAIL verdict on GOOD content should score 1 (false negative)."""
+        evaluator = CriticCalibrationEvaluator()
+        verdict = json.dumps(
+            {
+                "verdict": "FAIL",
+                "confidence": 55,
+                "issues": ["Formatting issue"],
+                "suggestions": [],
+            }
+        )
+        result = evaluator(response=verdict, context="GOOD")
+        assert result["critic_calibration_score"] == 1
+        assert result["critic_calibration_match"] is False
+        assert result["critic_calibration_category"] == "false_negative"
+
+    def test_invalid_label_scores_1(self):
+        """Invalid expected label should score 1."""
+        evaluator = CriticCalibrationEvaluator()
+        verdict = json.dumps(
+            {"verdict": "PASS", "confidence": 80, "issues": [], "suggestions": []}
+        )
+        result = evaluator(response=verdict, context="MAYBE")
+        assert result["critic_calibration_score"] == 1
+        assert result["critic_calibration_category"] == "invalid"
+
+    def test_invalid_json_scores_1(self):
+        """Non-JSON response should score 1."""
+        evaluator = CriticCalibrationEvaluator()
+        result = evaluator(response="not valid json", context="GOOD")
+        assert result["critic_calibration_score"] == 1
+        assert result["critic_calibration_category"] == "parse_error"
+
+    def test_invalid_verdict_value_scores_1(self):
+        """Verdict that is neither PASS nor FAIL should score 1."""
+        evaluator = CriticCalibrationEvaluator()
+        verdict = json.dumps(
+            {"verdict": "MAYBE", "confidence": 50, "issues": [], "suggestions": []}
+        )
+        result = evaluator(response=verdict, context="GOOD")
+        assert result["critic_calibration_score"] == 1
+        assert result["critic_calibration_category"] == "invalid_verdict"
+
+    def test_case_insensitive_context_label(self):
+        """Context label should be case-insensitive."""
+        evaluator = CriticCalibrationEvaluator()
+        verdict = json.dumps(
+            {"verdict": "PASS", "confidence": 85, "issues": [], "suggestions": []}
+        )
+        result = evaluator(response=verdict, context="good")
+        assert result["critic_calibration_score"] == 5
+        assert result["critic_calibration_match"] is True
+
+    def test_confidence_preserved_in_result(self):
+        """Confidence value should be returned in the result dict."""
+        evaluator = CriticCalibrationEvaluator()
+        verdict = json.dumps(
+            {"verdict": "PASS", "confidence": 73, "issues": [], "suggestions": []}
+        )
+        result = evaluator(response=verdict, context="GOOD")
+        assert result["critic_calibration_confidence"] == 73
+
+    def test_reason_includes_category(self):
+        """Reason string should mention the confusion-matrix category."""
+        evaluator = CriticCalibrationEvaluator()
+        verdict = json.dumps(
+            {"verdict": "FAIL", "confidence": 60, "issues": [], "suggestions": []}
+        )
+        result = evaluator(response=verdict, context="GOOD")
+        assert "false_negative" in result["critic_calibration_reason"]
+
+    def test_whitespace_in_context_handled(self):
+        """Leading/trailing whitespace in context should be stripped."""
+        evaluator = CriticCalibrationEvaluator()
+        verdict = json.dumps(
+            {"verdict": "PASS", "confidence": 80, "issues": [], "suggestions": []}
+        )
+        result = evaluator(response=verdict, context="  GOOD  ")
+        assert result["critic_calibration_score"] == 5
 
 
 # =====================================================================

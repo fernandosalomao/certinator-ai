@@ -12,6 +12,7 @@ Architecture:
        - StudyPlanFeasibilityEvaluator → study_plan_scenarios.jsonl
        - QuizQualityEvaluator → quiz_quality.jsonl
        - ContentSafetyEvaluator → (applied to all datasets)
+       - CriticCalibrationEvaluator → critic_calibration.jsonl
 
     2. SDK built-in evaluators (require Azure OpenAI endpoint):
        - RelevanceEvaluator → cert_info_golden.jsonl
@@ -49,6 +50,7 @@ RESULTS_DIR = EVAL_DIR / "results"
 # ─── Custom evaluator singletons ────────────────────────────────────────
 from evaluations.evaluators import (
     ContentSafetyEvaluator,
+    CriticCalibrationEvaluator,
     ExamContentAccuracyEvaluator,
     QuizQualityEvaluator,
     RoutingAccuracyEvaluator,
@@ -60,6 +62,7 @@ _exam_content_evaluator = ExamContentAccuracyEvaluator()
 _study_plan_evaluator = StudyPlanFeasibilityEvaluator()
 _quiz_quality_evaluator = QuizQualityEvaluator()
 _content_safety_evaluator = ContentSafetyEvaluator()
+_critic_calibration_evaluator = CriticCalibrationEvaluator()
 
 
 # ─── Helpers ─────────────────────────────────────────────────────────────
@@ -201,6 +204,79 @@ def _run_custom_suite(
     }
 
 
+def _run_critic_calibration_suite() -> dict:
+    """Run critic calibration and compute precision, recall, F1.
+
+    Wraps ``_run_custom_suite`` with aggregate confusion-matrix
+    metrics derived from per-row ``critic_calibration_category`` values.
+
+    Returns:
+        dict: Standard suite result enriched with ``precision``,
+            ``recall``, ``f1``, ``accuracy``, ``confidence_mae``,
+            and ``confusion_matrix`` fields.
+    """
+    base_result = _run_custom_suite(
+        dataset_name="critic_calibration",
+        evaluator=_critic_calibration_evaluator,
+        data_path=DATASETS_DIR / "critic_calibration.jsonl",
+        evaluator_name="CriticCalibrationEvaluator",
+    )
+
+    rows = base_result.get("rows", [])
+    categories = [
+        r.get("critic_calibration_category", "")
+        for r in rows
+        if "critic_calibration_category" in r
+    ]
+
+    tp = categories.count("true_positive")
+    tn = categories.count("true_negative")
+    fp = categories.count("false_positive")
+    fn = categories.count("false_negative")
+
+    precision = tp / (tp + fp) if (tp + fp) > 0 else 0.0
+    recall = tp / (tp + fn) if (tp + fn) > 0 else 0.0
+    f1 = (
+        2 * precision * recall / (precision + recall)
+        if (precision + recall) > 0
+        else 0.0
+    )
+    accuracy = (tp + tn) / len(categories) if categories else 0.0
+
+    # Confidence calibration: mean absolute error between
+    # stated confidence (0-1) and actual correctness (0 or 1).
+    confidences = [
+        (
+            r.get("critic_calibration_confidence", 0) / 100.0,
+            1.0 if r.get("critic_calibration_match", False) else 0.0,
+        )
+        for r in rows
+        if "critic_calibration_confidence" in r
+    ]
+    confidence_mae = (
+        round(
+            sum(abs(conf - actual) for conf, actual in confidences) / len(confidences),
+            4,
+        )
+        if confidences
+        else 0.0
+    )
+
+    base_result["confusion_matrix"] = {
+        "tp": tp,
+        "tn": tn,
+        "fp": fp,
+        "fn": fn,
+    }
+    base_result["precision"] = round(precision, 4)
+    base_result["recall"] = round(recall, 4)
+    base_result["f1"] = round(f1, 4)
+    base_result["accuracy"] = round(accuracy, 4)
+    base_result["confidence_mae"] = confidence_mae
+
+    return base_result
+
+
 def run_evaluation(
     include_builtin: bool = True,
     include_custom: bool = True,
@@ -275,6 +351,9 @@ def run_evaluation(
             data_path=DATASETS_DIR / "cert_info_golden.jsonl",
             evaluator_name="ContentSafetyEvaluator",
         )
+
+        # 7. Critic calibration (G6)
+        all_results["critic_calibration"] = _run_critic_calibration_suite()
 
         logger.info(
             "Evaluation: Custom suites complete. %d suites run.",

@@ -46,6 +46,24 @@ def main() -> None:
                     else "FAIL"
                 )
                 print(f"  [{status}] {suite_name}: {avg_score}/5.0")
+
+            # Critic calibration aggregate metrics
+            suites = result.get("suites", {})
+            critic_data = suites.get("critic_calibration", {})
+            if "precision" in critic_data:
+                print("\n  Critic Calibration Metrics:")
+                cm = critic_data.get("confusion_matrix", {})
+                print(
+                    f"    Confusion Matrix: TP={cm.get('tp', 0)} "
+                    f"TN={cm.get('tn', 0)} "
+                    f"FP={cm.get('fp', 0)} "
+                    f"FN={cm.get('fn', 0)}"
+                )
+                print(f"    Precision: {critic_data['precision']}")
+                print(f"    Recall:    {critic_data['recall']}")
+                print(f"    F1:        {critic_data['f1']}")
+                print(f"    Accuracy:  {critic_data['accuracy']}")
+                print(f"    Conf. MAE: {critic_data['confidence_mae']}")
         else:
             print("\n  No evaluation results available.")
 
