@@ -38,11 +38,15 @@ body {
     linear-gradient(180deg, #060914 0%, #090f1f 45%, #060a13 100%);
   color: var(--foreground);
   font-family: var(--font-geist-sans), Arial, Helvetica, sans-serif;
-  min-height: 100vh;
+  height: 100vh;
+  overflow: hidden;
 }
 
 .app-shell {
-  min-height: 100vh;
+  height: 100vh;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
 }
 
 .hero-panel {
@@ -59,6 +63,42 @@ body {
   border: 1px solid rgba(255, 255, 255, 0.12);
   background: linear-gradient(160deg, rgba(255, 255, 255, 0.09), rgba(255, 255, 255, 0.03));
   backdrop-filter: blur(8px);
+}
+
+/* ===================================================================
+   Hero collapse toggle (D1 — fixed-height chat)
+   =================================================================== */
+.hero-collapse-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.3rem 0.75rem;
+  border-radius: 9999px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.04);
+  color: rgba(255, 255, 255, 0.55);
+  font-size: 0.75rem;
+  cursor: pointer;
+  transition: color 0.2s, border-color 0.2s, background 0.2s;
+}
+
+.hero-collapse-toggle:hover {
+  color: rgba(255, 255, 255, 0.85);
+  border-color: rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.hero-collapse-toggle:focus-visible {
+  outline: 2px solid #6f87ff;
+  outline-offset: 2px;
+}
+
+.hero-collapse-toggle__chevron {
+  transition: transform 0.3s ease;
+}
+
+.hero-collapse-toggle__chevron--collapsed {
+  transform: rotate(180deg);
 }
 
 .surface-card {
