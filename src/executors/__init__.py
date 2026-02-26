@@ -168,28 +168,6 @@ def extract_response_text(
     return fallback
 
 
-def extract_message_text(
-    message: Any,
-    fallback: str = "",
-) -> str:
-    """
-    Extract text from a single chat message content list.
-
-    Parameters:
-        message (Any): Chat message with optional ``contents`` list.
-        fallback (str): Text returned when no text content is found.
-
-    Returns:
-        str: Extracted text content or fallback.
-    """
-    contents = getattr(message, "contents", None) or []
-    for content in reversed(contents):
-        text = getattr(content, "text", None)
-        if isinstance(text, str) and text.strip():
-            return text
-    return fallback
-
-
 async def emit_response(
     ctx: WorkflowContext,
     executor_id: str,

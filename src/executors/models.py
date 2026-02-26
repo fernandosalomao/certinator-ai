@@ -239,18 +239,6 @@ class QuizState(BaseModel):
 
 
 # ---------------------------------------------------------------------------
-# HITL request payloads
-# ---------------------------------------------------------------------------
-# HITL payloads are now passed as plain dicts (e.g. {"prompt": "..."})
-# to ensure JSON serialisability across the AG-UI bridge.
-# The typed classes below are retained for documentation only.
-#
-#   QuizQuestionRequest   → {"prompt": str}
-#   PostQuizStudyPlanOffer → {"prompt": str}
-#   PostStudyPlanPracticeOffer → {"prompt": str}
-
-
-# ---------------------------------------------------------------------------
 # Cross-workflow routing models
 # ---------------------------------------------------------------------------
 

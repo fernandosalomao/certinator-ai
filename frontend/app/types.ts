@@ -59,26 +59,3 @@ export type WorkflowProgress = {
   updated_at: string;
   reasoning?: string;
 };
-
-// ---------------------------------------------------------------------------
-// HITL parameter shapes (match useHumanInTheLoop parameter lists)
-// ---------------------------------------------------------------------------
-
-/** Args forwarded to the quiz-answer HITL component. */
-export type QuizAnswerArgs = {
-  questionText: string;
-  optionA: string;
-  optionB: string;
-  optionC: string;
-  optionD: string;
-  questionNumber: number;
-  totalQuestions: number;
-  topic: string;
-  difficulty: string;
-};
-
-/** Args forwarded to yes/no offer HITL components. */
-export type OfferArgs = {
-  message: string;
-  certification: string;
-};
