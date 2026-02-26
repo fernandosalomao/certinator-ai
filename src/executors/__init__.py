@@ -289,6 +289,67 @@ async def emit_response(
     )
 
 
+async def emit_response_streamed(
+    ctx: WorkflowContext,
+    executor_id: str,
+    text: str,
+    *,
+    chunk_size: int = 120,
+) -> None:
+    """Emit text in progressive chunks for streaming UX (G17 Option B).
+
+    Splits *text* on line boundaries into chunks of roughly
+    *chunk_size* characters and emits each chunk as a separate
+    ``AgentRunUpdateEvent`` sharing the same ``response_id``.
+    The AG-UI event bridge relays each event to CopilotKit which
+    appends the fragments, producing a progressive-render effect
+    identical to real token streaming.
+
+    Parameters:
+        ctx (WorkflowContext): Current workflow context.
+        executor_id (str): Identifier of the emitting executor.
+        text (str): Full text to stream progressively.
+        chunk_size (int): Target character count per chunk.
+    """
+    if not text:
+        return
+
+    response_id = str(uuid4())
+    lines = text.split("\n")
+    chunk: list[str] = []
+    length = 0
+
+    for line in lines:
+        chunk.append(line)
+        length += len(line) + 1  # +1 for the newline
+        if length >= chunk_size:
+            await ctx.add_event(
+                AgentRunUpdateEvent(
+                    executor_id,
+                    data=AgentRunResponseUpdate(
+                        contents=[TextContent(text="\n".join(chunk) + "\n")],
+                        role=Role.ASSISTANT,
+                        response_id=response_id,
+                    ),
+                )
+            )
+            chunk = []
+            length = 0
+
+    # Flush remaining lines.
+    if chunk:
+        await ctx.add_event(
+            AgentRunUpdateEvent(
+                executor_id,
+                data=AgentRunResponseUpdate(
+                    contents=[TextContent(text="\n".join(chunk))],
+                    role=Role.ASSISTANT,
+                    response_id=response_id,
+                ),
+            )
+        )
+
+
 async def emit_state_snapshot(
     ctx: WorkflowContext,
     executor_id: str,

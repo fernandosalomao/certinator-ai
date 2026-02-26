@@ -28,7 +28,12 @@ from agent_framework import (
 )
 
 import metrics
-from executors import emit_response, safe_agent_run, update_workflow_progress
+from executors import (
+    emit_response,
+    emit_response_streamed,
+    safe_agent_run,
+    update_workflow_progress,
+)
 from executors.models import (
     ApprovedStudyPlanOutput,
     CriticVerdict,
@@ -179,16 +184,11 @@ class CriticExecutor(Executor):
             # Study plan outputs route to PostStudyPlanExecutor
             # for a HITL practice-question offer.
             if output.content_type == "study_plan":
-                # Propagate the pre_streamed flag and whether
-                # content was modified so PostStudyPlanExecutor
-                # can decide whether to re-emit.
-                content_modified = text != output.content
                 await ctx.send_message(
                     ApprovedStudyPlanOutput(
                         content=text,
                         certification=(output.original_decision.certification),
                         original_decision=(output.original_decision),
-                        pre_streamed=(output.pre_streamed and not content_modified),
                     )
                 )
             else:
@@ -202,23 +202,14 @@ class CriticExecutor(Executor):
                     status="completed",
                     reasoning=critic_reasoning,
                 )
-                # G17: When the specialist already streamed the
-                # content token-by-token to the user, skip the
-                # duplicate emit.  Only re-emit when the content
-                # was modified (safety gate or auto-approve
-                # disclaimer) or was never streamed (revision path).
-                content_modified = text != output.content
-                if output.pre_streamed and not content_modified:
-                    logger.info(
-                        "Critic skipping emit — content was pre-streamed by %s",
-                        output.source_executor_id,
-                    )
-                else:
-                    await emit_response(
-                        ctx,
-                        output.source_executor_id,
-                        text,
-                    )
+                # G17 Option B: Stream approved content
+                # progressively so CopilotKit renders it
+                # with a typewriter effect.
+                await emit_response_streamed(
+                    ctx,
+                    output.source_executor_id,
+                    text,
+                )
         else:
             issue_summary = (
                 "; ".join(verdict.issues[:2])

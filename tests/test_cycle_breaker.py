@@ -148,6 +148,10 @@ class TestPostStudyPlanCycleBreaker:
                 new_callable=AsyncMock,
             ),
             patch(
+                "executors.post_study_plan_executor.emit_response_streamed",
+                new_callable=AsyncMock,
+            ),
+            patch(
                 "executors.post_study_plan_executor.update_workflow_progress",
                 new_callable=AsyncMock,
             ),
@@ -168,6 +172,10 @@ class TestPostStudyPlanCycleBreaker:
         with (
             patch(
                 "executors.post_study_plan_executor.emit_response",
+                new_callable=AsyncMock,
+            ),
+            patch(
+                "executors.post_study_plan_executor.emit_response_streamed",
                 new_callable=AsyncMock,
             ),
             patch(
@@ -193,6 +201,10 @@ class TestPostStudyPlanCycleBreaker:
                 new_callable=AsyncMock,
             ) as mock_emit,
             patch(
+                "executors.post_study_plan_executor.emit_response_streamed",
+                new_callable=AsyncMock,
+            ),
+            patch(
                 "executors.post_study_plan_executor.update_workflow_progress",
                 new_callable=AsyncMock,
             ),
@@ -202,10 +214,10 @@ class TestPostStudyPlanCycleBreaker:
         # HITL request_info should NOT have been called.
         ctx.request_info.assert_not_awaited()
 
-        # Should have emitted study tips (second call after the
-        # study plan content itself).
+        # Tips message emitted via emit_response (study plan content
+        # goes through emit_response_streamed separately).
         calls = mock_emit.await_args_list
-        assert len(calls) >= 2
+        assert len(calls) >= 1
         tips_text = calls[-1].args[2]
         assert "multiple study-and-practice rounds" in tips_text
 
@@ -220,6 +232,10 @@ class TestPostStudyPlanCycleBreaker:
         with (
             patch(
                 "executors.post_study_plan_executor.emit_response",
+                new_callable=AsyncMock,
+            ),
+            patch(
+                "executors.post_study_plan_executor.emit_response_streamed",
                 new_callable=AsyncMock,
             ),
             patch(
@@ -305,6 +321,10 @@ class TestPostStudyPlanCycleBreaker:
         with (
             patch(
                 "executors.post_study_plan_executor.emit_response",
+                new_callable=AsyncMock,
+            ),
+            patch(
+                "executors.post_study_plan_executor.emit_response_streamed",
                 new_callable=AsyncMock,
             ),
             patch(

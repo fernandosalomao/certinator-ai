@@ -113,14 +113,6 @@ class SpecialistOutput(BaseModel):
     original_decision: RoutingDecision = Field(
         description=("Original routing decision for re-generation context."),
     )
-    pre_streamed: bool = Field(
-        default=False,
-        description=(
-            "True when the content was already streamed token-by-token "
-            "to the user during generation (G17). The CriticExecutor "
-            "skips re-emitting approved content when this flag is set."
-        ),
-    )
 
 
 class LearningPathItem(BaseModel):
@@ -299,13 +291,4 @@ class ApprovedStudyPlanOutput(BaseModel):
     )
     original_decision: RoutingDecision = Field(
         description="Original routing decision for context.",
-    )
-    pre_streamed: bool = Field(
-        default=False,
-        description=(
-            "True when the study plan was already streamed "
-            "token-by-token to the user during generation "
-            "(G17). PostStudyPlanExecutor skips re-emitting "
-            "when this flag is set."
-        ),
     )

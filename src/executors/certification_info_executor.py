@@ -29,7 +29,6 @@ from executors import (
     emit_response,
     extract_response_text,
     safe_agent_run,
-    stream_and_accumulate,
     update_workflow_progress,
 )
 from executors.models import RevisionRequest, RoutingDecision, SpecialistOutput
@@ -92,7 +91,7 @@ class CertificationInfoExecutor(Executor):
             total_steps=3,
         )
         try:
-            result_text = await self._fetch_cert_info(decision, ctx)
+            result_text = await self._fetch_cert_info(decision)
             metrics.mcp_calls.add(
                 1,
                 {"executor": "certification-info", "status": "success"},
@@ -118,7 +117,6 @@ class CertificationInfoExecutor(Executor):
                 try:
                     result_text = await self._fetch_cert_info_general(
                         decision,
-                        ctx,
                     )
                 except Exception as fallback_exc:
                     logger.error(
@@ -153,7 +151,6 @@ class CertificationInfoExecutor(Executor):
                 source_executor_id=self.id,
                 iteration=1,
                 original_decision=decision,
-                pre_streamed=True,
             )
         )
 
@@ -262,7 +259,6 @@ class CertificationInfoExecutor(Executor):
                 source_executor_id=self.id,
                 iteration=revision.iteration,
                 original_decision=revision.original_decision,
-                pre_streamed=False,
             )
         )
 
@@ -273,21 +269,14 @@ class CertificationInfoExecutor(Executor):
     async def _fetch_cert_info(
         self,
         decision: RoutingDecision,
-        ctx: WorkflowContext,
     ) -> str:
-        """Call the CertificationInfoAgent and stream tokens to user.
-
-        Uses ``stream_and_accumulate`` to emit each text chunk as
-        an AG-UI event for progressive rendering in CopilotKit,
-        while accumulating the full response for downstream Critic
-        validation.
+        """Call the CertificationInfoAgent (with MCP tool).
 
         Parameters:
             decision (RoutingDecision): Original routing decision.
-            ctx (WorkflowContext): Workflow context for streaming.
 
         Returns:
-            str: Full accumulated certification information text.
+            str: Certification information text.
         """
         cert = decision.certification or "the requested certification"
         prompt = (
@@ -297,21 +286,18 @@ class CertificationInfoExecutor(Executor):
         )
         messages = [ChatMessage(role=Role.USER, text=prompt)]
 
-        logger.info("CertificationInfo agent streaming: %s", cert)
-        return await stream_and_accumulate(
-            ctx=ctx,
-            executor_id=self.id,
-            agent=self.cert_info_agent,
-            messages=messages,
-            fallback=("I could not retrieve certification information."),
+        logger.info("CertificationInfo agent call: %s", cert)
+        response = await safe_agent_run(self.cert_info_agent, messages)
+        return extract_response_text(
+            response,
+            fallback="I could not retrieve certification information.",
         )
 
     async def _fetch_cert_info_general(
         self,
         decision: RoutingDecision,
-        ctx: WorkflowContext,
     ) -> str:
-        """Call the fallback agent (no MCP) and stream tokens.
+        """Call the fallback agent (no MCP).
 
         Used when ``learn.microsoft.com/api/mcp`` is unavailable.
         The fallback agent responds from training knowledge and is
@@ -319,7 +305,6 @@ class CertificationInfoExecutor(Executor):
 
         Parameters:
             decision (RoutingDecision): Original routing decision.
-            ctx (WorkflowContext): Workflow context for streaming.
 
         Returns:
             str: General-knowledge certification information text
@@ -333,14 +318,12 @@ class CertificationInfoExecutor(Executor):
         )
         messages = [ChatMessage(role=Role.USER, text=prompt)]
         logger.info(
-            "CertificationInfo fallback streaming (no MCP) for: %s",
+            "CertificationInfo fallback (no MCP) for: %s",
             cert,
         )
-        return await stream_and_accumulate(
-            ctx=ctx,
-            executor_id=self.id,
-            agent=self.cert_info_fallback_agent,
-            messages=messages,
+        response = await safe_agent_run(self.cert_info_fallback_agent, messages)
+        return extract_response_text(
+            response,
             fallback=(
                 "\u26a0\ufe0f **Microsoft Learn is temporarily "
                 "unavailable.** I was unable to retrieve "

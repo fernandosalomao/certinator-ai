@@ -23,7 +23,12 @@ from agent_framework import (
 )
 
 import metrics
-from executors import emit_response, emit_state_snapshot, update_workflow_progress
+from executors import (
+    emit_response,
+    emit_response_streamed,
+    emit_state_snapshot,
+    update_workflow_progress,
+)
 from executors.models import (
     ApprovedStudyPlanOutput,
     RoutingDecision,
@@ -39,7 +44,7 @@ CROSS_ROUTE_CYCLE_KEY = "cross_route_cycle_count"
 
 # Maximum number of full Practice ↔ StudyPlan cycles before
 # the cycle breaker kicks in and stops offering practice.
-MAX_CROSS_ROUTE_CYCLES = 2
+MAX_CROSS_ROUTE_CYCLES = 3
 
 
 class PostStudyPlanExecutor(Executor):
@@ -88,18 +93,10 @@ class PostStudyPlanExecutor(Executor):
             status="completed",
         )
 
-        # G17: When the study plan was already streamed
-        # token-by-token to the user during generation, skip
-        # the duplicate emit.  Only re-emit when content was
-        # modified (safety gate / auto-approve disclaimer) or
-        # never streamed (revision path).
-        if approved.pre_streamed:
-            logger.info(
-                "PostStudyPlan skipping emit — content was "
-                "pre-streamed by specialist executor.",
-            )
-        else:
-            await emit_response(ctx, self.id, approved.content)
+        # G17 Option B: Stream the approved study plan
+        # progressively so CopilotKit renders it with a
+        # typewriter effect.
+        await emit_response_streamed(ctx, self.id, approved.content)
 
         cert = approved.certification or "your certification"
 
