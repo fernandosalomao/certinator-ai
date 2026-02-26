@@ -54,6 +54,10 @@ from executors.models import (
     RoutingDecision,
     StudyPlanFromQuizRequest,
 )
+from executors.post_study_plan_executor import (
+    CROSS_ROUTE_CYCLE_KEY,
+    MAX_CROSS_ROUTE_CYCLES,
+)
 from tools.practice import score_quiz, validate_questions
 
 logger = logging.getLogger(__name__)
@@ -663,6 +667,51 @@ class PracticeQuestionsExecutor(Executor):
             )
             await emit_response(ctx, self.id, congrats)
         else:
+            # ── Cross-route cycle breaker ─────────────────────
+            try:
+                cycle_count = await ctx.shared_state.get(
+                    CROSS_ROUTE_CYCLE_KEY,
+                )
+            except KeyError:
+                cycle_count = 0
+
+            if cycle_count >= MAX_CROSS_ROUTE_CYCLES:
+                # Cap reached — do NOT offer another study plan.
+                logger.info(
+                    "Cycle breaker: cap reached (%d >= %d) for "
+                    "%s — skipping study plan offer.",
+                    cycle_count,
+                    MAX_CROSS_ROUTE_CYCLES,
+                    cert_label,
+                )
+                metrics.cycle_breaker_cap_reached.add(
+                    1,
+                    {
+                        "source_executor": self.id,
+                        "certification": cert_label,
+                    },
+                )
+                weak_str = ", ".join(weak_topics) if weak_topics else "all topics"
+                await emit_response(
+                    ctx,
+                    self.id,
+                    f"You scored **{overall_pct}%** — not "
+                    "quite passing yet, but you've already "
+                    "done multiple study-and-practice rounds "
+                    "— great dedication!\n\n"
+                    f"Focus on: **{weak_str}**\n\n"
+                    "Here are some tips:\n"
+                    "1. **Hands-on labs** in the Azure portal "
+                    "or sandbox environments.\n"
+                    "2. **Microsoft Learn modules** for your "
+                    "weak areas.\n"
+                    "3. **Schedule your exam** when you feel "
+                    "ready — you're making progress!\n\n"
+                    "Start a new conversation anytime for a "
+                    "fresh practice session.",
+                )
+                return
+
             # Offer a focused study plan for weak topics.
             weak_str = ", ".join(weak_topics) if weak_topics else "all topics"
             offer = (

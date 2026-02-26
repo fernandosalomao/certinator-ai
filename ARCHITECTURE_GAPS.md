@@ -59,7 +59,7 @@ Gap analysis comparing the current implementation against the [project requireme
 | **Reasoning & Multi-step Thinking** | Strong | 5 reasoning patterns, typed message graph, conditional routing, revision loops, **Coordinator CoT audit trail (G7)** | — |
 | **Creativity & Originality** | Strong | Cross-route bidirectional flows (Practice ↔ StudyPlan), deterministic math offloading, dual-mode Practice agent, MCP fallback with disclaimer | — |
 | **User Experience & Presentation** | Good | CopilotKit v2 HITL, inline workflow progress, quiz session UI, offer cards | G13 (dynamic suggestions), G14 (accessibility), G17 (streaming) |
-| **Reliability & Safety** | Good | Bounded loops, transient error retry, question validation, structured output, **InputGuardExecutor (prompt injection + content safety + exam policy)**, **Output content safety gate** | G4, G12, G15 |
+| **Reliability & Safety** | Good | Bounded loops, transient error retry, question validation, structured output, **InputGuardExecutor (prompt injection + content safety + exam policy)**, **Output content safety gate**, **Cross-route cycle breaker (G4)** | G12, G15 |
 
 ---
 
@@ -151,15 +151,25 @@ This uses the same local regex-based approach as G1 (no Azure AI Content Safety 
 | **Effort** | Low (0.5 days) |
 | **Requirement** | Reliability & Safety |
 | **Criterion** | Reliability & Safety |
+| **Status** | ✅ **Implemented** |
 
-**Current state:** The cross-route flow `Practice → LearningPathFetcher → StudyPlan → Critic → PostStudyPlan → Practice` can theoretically create an infinite cycle: student fails quiz → accepts study plan → accepts practice → fails again → ad infinitum.
+**Implementation:** A shared-state cycle counter (`cross_route_cycle_count`) limits the number of full Practice ↔ StudyPlan round-trips to 2. When the cap is reached, both executors suppress their cross-route offers and emit study tips instead.
 
-**Gap:** No graph-level cycle breaker limits the number of full cross-route loop iterations.
+**What was built:**
+- **`CROSS_ROUTE_CYCLE_KEY`** and **`MAX_CROSS_ROUTE_CYCLES = 2`** constants in `post_study_plan_executor.py` — shared between both executors via import
+- **`PostStudyPlanExecutor.handle()`** — reads the counter from `ctx.shared_state` before offering practice; if `>= 2`, emits a closing message with study tips instead of the HITL practice offer
+- **`PostStudyPlanExecutor.on_practice_offer()`** — increments the counter when the student accepts the practice offer (before routing to `PracticeQuestionsExecutor`)
+- **`PracticeQuestionsExecutor._score_and_report()`** — on quiz failure, reads the counter; if `>= 2`, emits study tips instead of the HITL study plan offer, preventing the entire StudyPlan pipeline from starting
+- **`certinator.cycle_breaker.cap_reached`** OTel counter metric — recorded when either executor hits the cap, with `source_executor` and `certification` attributes
+- **12 unit tests** in `tests/test_cycle_breaker.py` — covering counter at 0, 1, 2, above cap, increment on acceptance, no increment on decline, constant consistency
 
-**Recommended approach:**
-- Add a loop counter in `WorkflowContext.shared_state` (e.g., `cross_route_cycle_count`)
-- In `PostStudyPlanExecutor`, check the counter before offering practice — if >= 2 cycles, skip the practice offer and provide a closing message instead
-- Alternatively, in `PracticeQuestionsExecutor`, check if the quiz originated from a `PostStudyPlanHandler` and suppress the study plan offer on failure
+**Cycle behaviour:**
+
+| Round | Counter | PostStudyPlan | PracticeQuestions (fail) |
+|-------|---------|---------------|-------------------------|
+| 1 | 0 → 1 | Offers practice | Offers study plan |
+| 2 | 1 → 2 | Offers practice | Offers study plan |
+| 3 | 2 (cap) | Study tips only | Study tips only |
 
 ```mermaid
 flowchart LR
@@ -563,7 +573,7 @@ flowchart LR
 |----|-----|--------|-------------|
 | ~~G2~~ | ~~Output Content Safety~~ | ~~Medium~~ | ✅ **Implemented** |
 | ~~G3~~ | ~~MCP Fallback for LearningPathFetcher~~ | ~~Low~~ | ✅ **Implemented** |
-| G4 | Cross-Route Cycle Breaker | Low | Reliability |
+| ~~G4~~ | ~~Cross-Route Cycle Breaker~~ | ~~Low~~ | ✅ **Implemented** |
 | ~~G5~~ | ~~End-to-End Evaluations~~ | ~~High~~ | ✅ **Implemented** |
 
 ### P2 — Medium (Nice to Have for Competition)

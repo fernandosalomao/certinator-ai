@@ -153,3 +153,16 @@ output_safety_blocks = _meter.create_counter(
     ),
     unit="1",
 )
+
+# ---------------------------------------------------------------------------
+# Cross-route cycle breaker
+# ---------------------------------------------------------------------------
+
+cycle_breaker_cap_reached = _meter.create_counter(
+    name="certinator.cycle_breaker.cap_reached",
+    description=(
+        "Cross-route cycle cap reached events. "
+        "Attributes: source_executor, certification."
+    ),
+    unit="1",
+)
