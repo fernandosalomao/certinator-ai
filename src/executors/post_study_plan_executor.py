@@ -225,10 +225,14 @@ class PostStudyPlanExecutor(Executor):
                 cert,
             )
 
-            await emit_response(
-                ctx,
-                self.id,
-                "Starting practice questions based on your study plan...",
+            await update_workflow_progress(
+                ctx=ctx,
+                route="practice",
+                active_executor=self.id,
+                message="Starting practice questions based on your study plan...",
+                current_step=1,
+                total_steps=1,
+                status="in_progress",
             )
 
             # Send a RoutingDecision that the

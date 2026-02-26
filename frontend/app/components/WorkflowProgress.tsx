@@ -1,5 +1,6 @@
 "use client";
 
+import { useRef } from "react";
 import type { WorkflowProgress as WorkflowProgressState } from "../types";
 import { useWorkflowProgress } from "./WorkflowProgressContext";
 
@@ -57,18 +58,38 @@ function SpinnerIcon() {
  * isDone when:
  *   • the overall workflow has completed (liveStatus === "completed"), OR
  *   • a later step has advanced past this one (liveStep > thisStep)
+ *
+ * Route discrimination: only react to live progress from the SAME route.
+ * A different route starting (e.g. "practice" after "study-plan-generator")
+ * must not flip earlier steps back to spinning.
+ *
+ * Ratchet: once a step transitions to done, it stays done permanently.
+ * This prevents flicker when a new route overwrites the global progress.
  */
 export default function WorkflowProgress({ progress }: WorkflowStepProps) {
   // Get live state from context for reactive updates
   const { currentProgress } = useWorkflowProgress();
-  
+  const frozenDone = useRef(false);
+
   if (!progress?.route) return null;
 
-  const liveStatus = currentProgress?.status ?? progress.status;
-  const liveStep   = currentProgress?.current_step ?? progress.current_step;
-  const isDone =
+  // Only consider live progress from the same route — updates
+  // from a different route must not affect this step's state.
+  const sameRoute = currentProgress?.route === progress.route;
+  const liveStatus = sameRoute
+    ? (currentProgress?.status ?? progress.status)
+    : progress.status;
+  const liveStep = sameRoute
+    ? (currentProgress?.current_step ?? progress.current_step)
+    : progress.current_step;
+
+  const computedDone =
     liveStatus === "completed" ||
     liveStep > progress.current_step;
+
+  // Ratchet: once done, never revert to spinning.
+  if (computedDone) frozenDone.current = true;
+  const isDone = frozenDone.current;
 
   const statusText = isDone ? "Completed" : "In progress";
 

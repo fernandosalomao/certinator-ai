@@ -3,7 +3,6 @@
 import { useState, useCallback, useEffect } from "react";
 import { CopilotChat } from "@copilotkit/react-core/v2";
 import CertinatorHooks from "./components/CertinatorHooks";
-import QuizDashboard from "./components/QuizDashboard";
 import ErrorBoundary from "./components/ErrorBoundary";
 import SlowRunIndicator from "./components/SlowRunIndicator";
 import { WorkflowProgressProvider } from "./components/WorkflowProgressContext";
@@ -46,8 +45,6 @@ export default function Page() {
     },
     [setPersistedState],
   );
-
-  const quiz = agentState.active_quiz_state;
 
   return (
     <main className="min-h-screen">
@@ -117,12 +114,9 @@ export default function Page() {
           </div>
         </div>
 
-        {/* Quiz dashboard — visible outside the chat once a quiz is completed.
-            During in_progress, the QuizSession component inside the chat
-            already shows its own live progress bar + question navigator. */}
-        {quiz && quiz.status === "completed" && (
-          <QuizDashboard quiz={quiz} />
-        )}
+        {/* Quiz dashboard is rendered inside the chat via
+            useRenderTool("update_active_quiz_state") in CertinatorHooks.
+            No external rendering needed here. */}
 
         <div
           className="hero-panel rounded-2xl p-5 md:p-6"

@@ -108,11 +108,11 @@ export default function CertinatorHooks({ onStateChange }: CertinatorHooksProps)
     {
       name: "update_active_quiz_state",
       parameters: z.object({
-        active_quiz_state: z.record(z.unknown()).optional(),
+        quiz_state: z.record(z.unknown()).optional(),
       }),
       render: ({ parameters, status }) => {
         if (status === "inProgress") return <></>;
-        const quiz = parameters.active_quiz_state as CertinatorAgentState["active_quiz_state"];
+        const quiz = parameters.quiz_state as CertinatorAgentState["active_quiz_state"];
         if (!quiz || quiz.status !== "completed" || !quiz.questions?.length) return <></>;
         return <QuizDashboard quiz={quiz} />;
       },
@@ -175,13 +175,20 @@ export default function CertinatorHooks({ onStateChange }: CertinatorHooksProps)
             );
           }
           // User responded — awaiting backend scoring.
+          // Render as a WorkflowProgress step so it matches the
+          // visual style of "Coordinator: Routing to ..." rows.
           return (
-            <div className="quiz-processing-indicator">
-              <div className="quiz-processing-indicator__spinner" />
-              <span className="quiz-processing-indicator__text">
-                Evaluating your answers and generating feedback…
-              </span>
-            </div>
+            <WorkflowProgress
+              progress={{
+                route: "practice",
+                active_executor: "practice-questions",
+                message: "Evaluating your answers and generating feedback…",
+                current_step: 1,
+                total_steps: 1,
+                status: "in_progress",
+                updated_at: new Date().toISOString(),
+              }}
+            />
           );
         }
 

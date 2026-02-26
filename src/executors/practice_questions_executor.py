@@ -46,6 +46,7 @@ from executors import (
     emit_state_snapshot,
     extract_response_text,
     safe_agent_run,
+    update_workflow_progress,
 )
 from executors.models import (
     LearningPathFetcherResponse,
@@ -652,6 +653,18 @@ class PracticeQuestionsExecutor(Executor):
             result,
         )
         await emit_response(ctx, self.id, feedback)
+
+        # Mark workflow progress as completed so all spinner icons
+        # transition to the done (checkmark) state.
+        await update_workflow_progress(
+            ctx=ctx,
+            route="practice",
+            active_executor=self.id,
+            message="Quiz scored — feedback ready.",
+            current_step=1,
+            total_steps=1,
+            status="completed",
+        )
 
         if passed:
             # Congratulations with exam scheduling link.
