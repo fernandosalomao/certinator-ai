@@ -491,20 +491,32 @@ readinessProbe:
 | **Effort** | Medium (2-3 days) |
 | **Requirement** | User Experience & Presentation |
 | **Criterion** | User Experience & Presentation |
+| **Status** | ✅ **Implemented** |
 
-**Current state:** Basic semantic HTML is used, but ARIA attributes are missing from quiz and workflow components. Dark-mode-only design may not meet WCAG AA contrast ratios.
+**Implementation:** WCAG AA accessibility improvements across all interactive frontend components — ARIA attributes, semantic roles, screen-reader-only text, and contrast ratio fixes.
 
-**Gap:** Multiple accessibility issues across interactive components.
+**What was built:**
+- **`QuizCard`** — `aria-label="Option {letter}: {text}"` on each option button, `aria-pressed` for selection state, `aria-hidden="true"` on decorative letter badge, `role="group"` on the options container
+- **`QuizSession`** — dot navigator buttons now have `aria-label` with question number + answered/unanswered + current status, `aria-current="step"` on active dot, `<nav>` element with `aria-label="Question navigation"` replaces plain `<div>`
+- **`QuizSession` progress bar** — `role="progressbar"`, `aria-valuenow`, `aria-valuemin`, `aria-valuemax`, `aria-label` on the bar track element
+- **`QuizDashboard` progress bar** — same ARIA progressbar attributes as QuizSession
+- **`WorkflowProgress`** — SVG icons get `role="img"` + `aria-label` ("Completed" / "In progress"), step container gets `role="status"` + `aria-label` combining message and status, `.sr-only` span supplements color-only status differentiation, decorative pulse element gets `aria-hidden="true"`
+- **`OfferCard`** — Yes/No buttons get contextual `aria-label` combining action with certification, `role="group"` on actions container, result paragraph gets `aria-live="polite"` for screen reader announcement
+- **`.sr-only` CSS class** — visually hidden but accessible utility class added to `globals.css`
+- **Contrast ratio audit** — all 8 primary text/background pairings verified to pass WCAG AA (4.5:1). Two disabled button opacities were failing: nav-btn (was 0.35 → bumped to 0.60, now 4.6:1) and submit-btn (was 0.45 → bumped to 0.60, now 5.0:1). Note: disabled controls are technically exempt per SC 1.4.3, but fixed for best-practice readability.
 
-**Specific issues:**
+**Contrast audit results (all PASS AA 4.5:1):**
 
-| Component | Issue | Fix |
-|-----------|-------|-----|
-| `QuizCard` | No `aria-label` on option buttons | Add `aria-label="Option {letter}: {text}"` |
-| `QuizSession` | Dot navigator buttons lack descriptive labels | Add `aria-label` with answered status |
-| `QuizSession`, `QuizDashboard` | Progress bar not ARIA-tagged | Add `role="progressbar"`, `aria-valuenow`, `aria-valuemax` |
-| `WorkflowProgress` | Color-only status differentiation | Ensure icons/text supplement color |
-| Layout | Dark-mode-only (`<html className="dark">`) | Verify contrast ratios meet WCAG AA (4.5:1) |
+| Element | Foreground | Background | Ratio |
+|---------|-----------|------------|-------|
+| Body text | `#e7ecff` | `#060914` | 16.9:1 |
+| Muted text | `#9cadde` | `#0a1124` | 8.4:1 |
+| Badge text | `#b8c6f0` | `#0a1124` | 11.1:1 |
+| Easy badge | `#6ee7b7` | `#0a1124` | 12.3:1 |
+| Medium badge | `#fbbf24` | `#0a1124` | 11.2:1 |
+| Hard badge | `#fca5a5` | `#0a1124` | 9.9:1 |
+| Option text | `#d8e2ff` | `#0a1124` | 14.5:1 |
+| Reasoning text | `#94a3b8` | `#0a1124` | 7.3:1 |
 
 ---
 
@@ -666,7 +678,7 @@ readinessProbe:
 | ~~G9~~ | ~~Health Check Endpoints~~ | ~~Low~~ | ✅ **Implemented** |
 | ~~G10~~ | ~~Groundedness Evaluation~~ | ~~Medium~~ | ✅ **Implemented** |
 | ~~G12~~ | ~~Rate Limiting~~ | ~~Low~~ | ✅ **Implemented** |
-| G14 | Accessibility (WCAG) | Medium | User Experience |
+| ~~G14~~ | ~~Accessibility (WCAG)~~ | ~~Medium~~ | ✅ **Implemented** |
 | G15 | Frontend Error Resilience | Medium | Reliability |
 
 ### P3 — Low (Future Enhancement)
@@ -690,7 +702,7 @@ readinessProbe:
 | Multi-agent system | ✅ 6 agents, 8 executors, graph workflow | — |
 | Reasoning & multi-step thinking | ✅ 5 reasoning patterns, **Coordinator CoT (G7)** | — |
 | External tools, APIs, MCP | ✅ MS Learn MCP, schedule tool, score tool | G18, G20 |
-| Demoable experience | ✅ CopilotKit chat, HITL cards, progress | G14, G17 |
+| Demoable experience | ✅ CopilotKit chat, HITL cards, progress, **WCAG accessibility (G14)** | G17 |
 | Clear documentation | ✅ ARCHITECTURE.md, workflow.svg, docstrings | — |
 | Evaluations & telemetry | ✅ OTel tracing + 8 custom metrics, **E2E evaluation pipeline (7 evaluators, JSONL datasets, CLI)**, **Critic calibration (precision/recall/F1)**, **Groundedness evaluation (G10)** | — |
 | Responsible AI | ✅ Critic gate, structured output, deterministic scoring, MCP fallback (CertInfo + LearningPathFetcher), bounded loops, **InputGuardExecutor**, **Output content safety gate**, **Rate limiting (G12)** | G4, G11, G19, G20 |

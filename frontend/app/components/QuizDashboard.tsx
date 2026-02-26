@@ -46,7 +46,14 @@ export default function QuizDashboard({ quiz }: QuizDashboardProps) {
 
       {/* Progress bar */}
       <div className="quiz-dashboard__progress">
-        <div className="quiz-dashboard__bar-track">
+        <div
+          className="quiz-dashboard__bar-track"
+          role="progressbar"
+          aria-valuenow={answered}
+          aria-valuemin={0}
+          aria-valuemax={total}
+          aria-label={`Quiz progress: ${answered} of ${total} questions answered`}
+        >
           <div
             className="quiz-dashboard__bar-fill"
             style={{ width: `${progressPct}%` }}

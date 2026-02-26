@@ -87,7 +87,14 @@ export default function QuizSession({
     <div className="quiz-session">
       {/* Progress bar */}
       <div className="quiz-session__progress">
-        <div className="quiz-session__bar-track">
+        <div
+          className="quiz-session__bar-track"
+          role="progressbar"
+          aria-valuenow={answeredCount}
+          aria-valuemin={0}
+          aria-valuemax={total}
+          aria-label={`Quiz progress: ${answeredCount} of ${total} questions answered`}
+        >
           <div
             className="quiz-session__bar-fill"
             style={{
@@ -101,7 +108,7 @@ export default function QuizSession({
       </div>
 
       {/* Question dots for navigation */}
-      <div className="quiz-session__dots">
+      <nav className="quiz-session__dots" aria-label="Question navigation">
         {questions.map((q, idx) => {
           const isAnswered = !!answers[String(q.question_number)];
           const isCurrent = idx === currentIdx;
@@ -118,12 +125,14 @@ export default function QuizSession({
                 .filter(Boolean)
                 .join(" ")}
               title={`Question ${idx + 1}`}
+              aria-label={`Question ${idx + 1}${isAnswered ? ", answered" : ", unanswered"}${isCurrent ? ", current" : ""}`}
+              aria-current={isCurrent ? "step" : undefined}
             >
               {idx + 1}
             </button>
           );
         })}
-      </div>
+      </nav>
 
       {/* Current question card */}
       <QuizCard

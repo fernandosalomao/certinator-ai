@@ -1,5 +1,20 @@
 @import "tailwindcss";
 
+/* ===================================================================
+   Screen-reader-only utility — visually hidden, accessible to AT
+   =================================================================== */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border-width: 0;
+}
+
 :root {
   --background: #060914;
   --foreground: #e7ecff;
@@ -507,7 +522,7 @@ body {
 }
 
 .quiz-session__btn--nav:disabled {
-  opacity: 0.35;
+  opacity: 0.6;
   cursor: default;
 }
 
@@ -522,7 +537,7 @@ body {
 }
 
 .quiz-session__btn--submit:disabled {
-  opacity: 0.45;
+  opacity: 0.6;
   cursor: default;
 }
 

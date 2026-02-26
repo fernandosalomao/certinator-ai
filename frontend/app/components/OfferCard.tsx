@@ -49,12 +49,13 @@ export default function OfferCard({
       <p className="offer-card__message">{message}</p>
 
       {!answered ? (
-        <div className="offer-card__actions">
+        <div className="offer-card__actions" role="group" aria-label={`Actions for ${certification}`}>
           <button
             type="button"
             className="offer-btn offer-btn--yes"
             onClick={() => handleClick("yes")}
             disabled={disabled}
+            aria-label={`${yesLabel} — ${certification}`}
           >
             {yesLabel}
           </button>
@@ -63,12 +64,13 @@ export default function OfferCard({
             className="offer-btn offer-btn--no"
             onClick={() => handleClick("no")}
             disabled={disabled}
+            aria-label={`${noLabel} — ${certification}`}
           >
             {noLabel}
           </button>
         </div>
       ) : (
-        <p className="offer-card__result">
+        <p className="offer-card__result" aria-live="polite">
           {answered === "yes"
             ? "Great — preparing your content..."
             : "No problem! Come back anytime."}

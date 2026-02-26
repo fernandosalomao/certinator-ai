@@ -87,7 +87,7 @@ export default function QuizCard({
       <p className="quiz-card__question">{questionText}</p>
 
       {/* Options */}
-      <div className="quiz-card__options">
+      <div className="quiz-card__options" role="group" aria-label={`Answer options for question ${questionNumber}`}>
         {options.map(([letter, text]) => {
           const isSelected = selected === letter;
           return (
@@ -95,10 +95,12 @@ export default function QuizCard({
               key={letter}
               type="button"
               disabled={!!selected}
+              aria-pressed={isSelected}
+              aria-label={`Option ${letter}: ${text}`}
               onClick={() => handleClick(letter)}
               className={`quiz-option ${isSelected ? "quiz-option--selected" : ""}`}
             >
-              <span className="quiz-option__letter">{letter}</span>
+              <span className="quiz-option__letter" aria-hidden="true">{letter}</span>
               <span className="quiz-option__text">{text}</span>
             </button>
           );

@@ -15,6 +15,8 @@ function CheckIcon() {
       fill="none"
       stroke="currentColor"
       viewBox="0 0 24 24"
+      role="img"
+      aria-label="Completed"
     >
       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
     </svg>
@@ -34,6 +36,8 @@ function SpinnerIcon() {
       xmlns="http://www.w3.org/2000/svg"
       fill="none"
       viewBox="0 0 24 24"
+      role="img"
+      aria-label="In progress"
     >
       <style>{`@keyframes wpspin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
       <circle style={{ opacity: 0.25 }} cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
@@ -66,23 +70,30 @@ export default function WorkflowProgress({ progress }: WorkflowStepProps) {
     liveStatus === "completed" ||
     liveStep > progress.current_step;
 
+  const statusText = isDone ? "Completed" : "In progress";
+
   return (
     <div
       className={`workflow-progress__step ${
         isDone ? "workflow-progress__step--done" : "workflow-progress__step--active"
       }`}
       style={{ margin: "2px 0" }}
+      role="status"
+      aria-label={`${progress.message} — ${statusText}`}
     >
       <span className="workflow-progress__step-icon-wrap">
         {isDone ? <CheckIcon /> : <SpinnerIcon />}
       </span>
       <span className="workflow-progress__step-body">
-        <span className="workflow-progress__step-text">{progress.message}</span>
+        <span className="workflow-progress__step-text">
+          {progress.message}
+          <span className="sr-only"> — {statusText}</span>
+        </span>
         {progress.reasoning && (
           <span className="workflow-progress__step-reasoning">{progress.reasoning}</span>
         )}
       </span>
-      {!isDone && <span className="workflow-progress__step-pulse" />}
+      {!isDone && <span className="workflow-progress__step-pulse" aria-hidden="true" />}
     </div>
   );
 }

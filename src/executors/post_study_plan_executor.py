@@ -143,8 +143,8 @@ class PostStudyPlanExecutor(Executor):
 
         # Offer practice questions via HITL.
         offer = (
-            "Would you like some **practice questions** "
-            f"for **{cert}** based on your study plan?"
+            "Would you like some practice questions "
+            f"for {cert} based on your study plan?"
         )
         await ctx.request_info(
             request_data={
