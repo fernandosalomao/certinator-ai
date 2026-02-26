@@ -11,6 +11,7 @@
  */
 
 import { useState } from "react";
+import { useInactivityTimer } from "../hooks/useInactivityTimer";
 
 type OfferCardProps = {
   message: string;
@@ -34,6 +35,19 @@ export default function OfferCard({
   disabled = false,
 }: OfferCardProps) {
   const [answered, setAnswered] = useState<"yes" | "no" | null>(null);
+
+  // Auto-decline after 2 minutes of inactivity so the backend HITL
+  // doesn't hang indefinitely (G15 — HITL session abandonment).
+  useInactivityTimer({
+    timeoutMs: 2 * 60 * 1000,
+    enabled: answered === null && !disabled,
+    onTimeout: () => {
+      if (answered === null) {
+        setAnswered("no");
+        onRespond("no");
+      }
+    },
+  });
 
   const handleClick = (choice: "yes" | "no") => {
     if (answered || disabled) return;

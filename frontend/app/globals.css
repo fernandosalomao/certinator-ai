@@ -1065,3 +1065,109 @@ body {
   background: rgba(255, 100, 100, 0.22);
 }
 
+/* ===================================================================
+   G15 — Frontend Error Resilience: new UI elements
+   =================================================================== */
+
+/* ── SlowRunIndicator cancel button ──────────────────────────────── */
+.slow-run-indicator__cancel {
+  flex-shrink: 0;
+  margin-left: auto;
+  padding: 0.25rem 0.75rem;
+  background: rgba(255, 200, 80, 0.1);
+  border: 1px solid rgba(255, 200, 80, 0.3);
+  border-radius: 9999px;
+  color: rgba(255, 220, 130, 0.85);
+  font-size: 0.75rem;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.slow-run-indicator__cancel:hover {
+  background: rgba(255, 200, 80, 0.22);
+}
+
+/* Cancelled state — green confirmation */
+.slow-run-indicator--cancelled {
+  border-color: rgba(110, 231, 183, 0.2);
+  background: rgba(8, 30, 20, 0.8);
+}
+.slow-run-indicator--cancelled .slow-run-indicator__text {
+  color: rgba(110, 231, 183, 0.75);
+}
+
+/* ── Session recovered banner ────────────────────────────────────── */
+.session-recovered-banner {
+  position: fixed;
+  top: 1rem;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.6rem 1.2rem;
+  border: 1px solid rgba(110, 231, 183, 0.25);
+  background: rgba(8, 30, 20, 0.92);
+  backdrop-filter: blur(8px);
+  border-radius: 9999px;
+  font-size: 0.82rem;
+  color: rgba(110, 231, 183, 0.85);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+  animation: recovery-slide-in 0.35s ease-out;
+}
+
+.session-recovered-banner__dismiss {
+  padding: 0.15rem 0.6rem;
+  background: rgba(110, 231, 183, 0.1);
+  border: 1px solid rgba(110, 231, 183, 0.25);
+  border-radius: 9999px;
+  color: rgba(110, 231, 183, 0.8);
+  font-size: 0.72rem;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.session-recovered-banner__dismiss:hover {
+  background: rgba(110, 231, 183, 0.2);
+}
+
+@keyframes recovery-slide-in {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) translateY(-1rem);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+}
+
+/* ── Quiz inactivity warning (inside QuizSession) ────────────────── */
+.quiz-session__inactivity {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  border: 1px solid rgba(251, 191, 36, 0.25);
+  background: rgba(30, 25, 8, 0.85);
+  border-radius: 0.8rem;
+  padding: 0.6rem 1rem;
+  margin-bottom: 0.6rem;
+  font-size: 0.8rem;
+  color: rgba(251, 191, 36, 0.8);
+  animation: recovery-slide-in 0.3s ease-out;
+}
+
+.quiz-session__inactivity-dismiss {
+  flex-shrink: 0;
+  margin-left: auto;
+  padding: 0.2rem 0.65rem;
+  background: rgba(251, 191, 36, 0.1);
+  border: 1px solid rgba(251, 191, 36, 0.25);
+  border-radius: 9999px;
+  color: rgba(251, 191, 36, 0.85);
+  font-size: 0.72rem;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.quiz-session__inactivity-dismiss:hover {
+  background: rgba(251, 191, 36, 0.22);
+}

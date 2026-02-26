@@ -14,8 +14,10 @@
  * `_extract_function_responses` error when re-sending full history.
  */
 
-import { useCallback, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import QuizCard from "./QuizCard";
+import { useSessionStorage } from "../hooks/useSessionStorage";
+import { useInactivityTimer } from "../hooks/useInactivityTimer";
 
 /** Shape of each question from the backend payload. */
 type SessionQuestion = {
@@ -47,10 +49,29 @@ export default function QuizSession({
 }: QuizSessionProps) {
   const total = questions.length;
 
+  // Stable storage key derived from certification + question count so
+  // stale data from a previous quiz doesn't collide (G15).
+  const storageKey = useMemo(
+    () => `certinator:quiz:${certification}:${total}`,
+    [certification, total],
+  );
+
   // Track current question index and all collected answers.
-  const [currentIdx, setCurrentIdx] = useState(0);
-  const [answers, setAnswers] = useState<Record<string, string>>({});
+  // Persisted to sessionStorage so answers survive page reloads (G15).
+  const [answers, setAnswers, clearAnswers] = useSessionStorage<
+    Record<string, string>
+  >(`${storageKey}:answers`, {});
+  const [currentIdx, setCurrentIdx, clearIdx] = useSessionStorage<number>(
+    `${storageKey}:idx`,
+    0,
+  );
   const [submitted, setSubmitted] = useState(false);
+
+  // Inactivity timer — warn the student after 5 minutes of no interaction (G15).
+  const { isInactive, reset: resetInactivity } = useInactivityTimer({
+    timeoutMs: 5 * 60 * 1000,
+    enabled: !submitted,
+  });
 
   const answeredCount = Object.keys(answers).length;
   const allAnswered = answeredCount === total;
@@ -79,12 +100,33 @@ export default function QuizSession({
     if (submitted) return;
     setSubmitted(true);
     respond(JSON.stringify({ answers }));
-  }, [answers, respond, submitted]);
+    // Clear persisted quiz state on successful submission (G15).
+    clearAnswers();
+    clearIdx();
+  }, [answers, respond, submitted, clearAnswers, clearIdx]);
 
   if (!current) return null;
 
   return (
     <div className="quiz-session">
+      {/* Inactivity warning banner (G15). */}
+      {isInactive && !submitted && (
+        <div className="quiz-session__inactivity" role="alert">
+          <span>
+            You&apos;ve been inactive — your progress is saved locally.
+            Resume answering or submit your quiz.
+          </span>
+          <button
+            type="button"
+            className="quiz-session__inactivity-dismiss"
+            onClick={resetInactivity}
+            aria-label="Dismiss inactivity warning"
+          >
+            Got it
+          </button>
+        </div>
+      )}
+
       {/* Progress bar */}
       <div className="quiz-session__progress">
         <div

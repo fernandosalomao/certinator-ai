@@ -1,24 +1,50 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { CopilotChat } from "@copilotkit/react-core/v2";
 import CertinatorHooks from "./components/CertinatorHooks";
 import QuizDashboard from "./components/QuizDashboard";
 import ErrorBoundary from "./components/ErrorBoundary";
 import SlowRunIndicator from "./components/SlowRunIndicator";
 import { WorkflowProgressProvider } from "./components/WorkflowProgressContext";
+import { useSessionStorage } from "./hooks/useSessionStorage";
 import type { CertinatorAgentState } from "./types";
 
 // Suggestions have moved to useConfigureSuggestions in CertinatorHooks
 // (supports both static before-first-message AND dynamic after-first-message).
 
+/** Auto-dismiss duration for the "session recovered" banner (ms). */
+const RECOVERY_BANNER_MS = 4_000;
+
 export default function Page() {
   // Track agent shared state for the sidebar quiz dashboard.
-  const [agentState, setAgentState] = useState<CertinatorAgentState>({});
+  // Persisted to sessionStorage so completed quizzes / workflow progress
+  // survive page reloads (G15 — Frontend Error Resilience).
+  const [persistedState, setPersistedState, clearPersistedState] =
+    useSessionStorage<CertinatorAgentState>("certinator:agent-state", {});
+
+  const [agentState, setAgentState] = useState<CertinatorAgentState>(
+    () => persistedState,
+  );
+
+  // Show a brief "Session recovered" banner when state was restored.
+  const [showRecovery, setShowRecovery] = useState(false);
+  useEffect(() => {
+    // If we recover meaningful state (e.g. a completed quiz), show the banner.
+    if (persistedState.active_quiz_state || persistedState.workflow_progress) {
+      setShowRecovery(true);
+      const timer = setTimeout(() => setShowRecovery(false), RECOVERY_BANNER_MS);
+      return () => clearTimeout(timer);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Run once on mount.
 
   const handleStateChange = useCallback(
-    (state: CertinatorAgentState) => setAgentState(state),
-    [],
+    (state: CertinatorAgentState) => {
+      setAgentState(state);
+      setPersistedState(state);
+    },
+    [setPersistedState],
   );
 
   const quiz = agentState.active_quiz_state;
@@ -27,6 +53,23 @@ export default function Page() {
     <main className="min-h-screen">
       <ErrorBoundary>
         <WorkflowProgressProvider currentProgress={agentState.workflow_progress}>
+        {/* Recovery banner — shown briefly after state is restored from sessionStorage (G15). */}
+        {showRecovery && (
+          <div className="session-recovered-banner" role="status" aria-live="polite">
+            <span>✓ Your previous session was recovered.</span>
+            <button
+              type="button"
+              className="session-recovered-banner__dismiss"
+              onClick={() => {
+                setShowRecovery(false);
+                clearPersistedState();
+              }}
+              aria-label="Dismiss recovery notice"
+            >
+              Dismiss
+            </button>
+          </div>
+        )}
         {/* Register all CopilotKit hooks (HITL, shared state, readables). */}
         <CertinatorHooks onStateChange={handleStateChange} />
 

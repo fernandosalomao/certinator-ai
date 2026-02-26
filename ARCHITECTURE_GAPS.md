@@ -528,20 +528,35 @@ readinessProbe:
 | **Effort** | Medium (2-3 days) |
 | **Requirement** | Reliability & Safety |
 | **Criterion** | Reliability & Safety |
+| **Status** | ✅ **Implemented** |
 
-**Current state:** `ErrorBoundary` catches React render errors. `SlowRunIndicator` shows passive warnings. No reconnection logic, partial state recovery, or HITL timeout handling exists.
+**Implementation:** Five resilience improvements across the frontend — sessionStorage persistence, cancel button, inactivity timer, and structured API error responses.
 
-**Gap:** Multiple resilience gaps for production usage.
+**What was built:**
 
-**Specific gaps:**
+- **`useSessionStorage` hook** (`frontend/app/hooks/useSessionStorage.ts`) — generic `sessionStorage`-backed `useState` replacement with staleness guard (`maxAgeMs`, default 30 min), graceful SSR/quota degradation, and `clear()` helper
+- **`useInactivityTimer` hook** (`frontend/app/hooks/useInactivityTimer.ts`) — detects user inactivity via mouse/keyboard/touch/scroll/focus events, fires a callback after a configurable timeout, returns `isInactive` state and `reset()` function
+- **Quiz answer persistence** (`QuizSession`) — `answers` and `currentIdx` stored in `sessionStorage` keyed by `certinator:quiz:{certification}:{total}`, cleared on successful submission. Survives page reloads and accidental tab closure during a quiz.
+- **Agent state persistence** (`page.tsx`) — `agentState` (quiz results, workflow progress) persisted to `sessionStorage` on every state change, restored on mount. Shows a "Session recovered" fixed banner that auto-dismisses after 4 s or can be manually dismissed.
+- **Cancel button for backend timeouts** (`SlowRunIndicator`) — after the 30 s slow-run threshold, a "Cancel" button appears alongside the warning. Calls `agent.abortRun()` to abort the in-flight run, then displays a "Request cancelled" confirmation that auto-fades after 5 s.
+- **HITL inactivity handling**:
+  - **QuizSession**: 5-minute inactivity timer shows a warning banner ("Your progress is saved locally") with a "Got it" dismiss button. Answers are already persisted via `useSessionStorage`.
+  - **OfferCard**: 2-minute inactivity timer auto-declines the offer (`respond("no")`) so the backend `request_info` call doesn't hang indefinitely.
+- **API route error handling** (`frontend/app/api/copilotkit/route.ts`) — POST handler wrapped in try/catch returning structured JSON:
+  - `TypeError` with fetch/network keywords → HTTP 502 `backend_unavailable`
+  - `AbortError` → HTTP 504 `request_timeout`
+  - All other errors → HTTP 500 `internal_server_error`
+  - Response shape: `{ error, message, timestamp }`
 
-| Gap | Impact | Fix |
-|-----|--------|-----|
-| Network disconnection during quiz | Local quiz answers lost | Persist answers in sessionStorage |
-| Page reload during workflow | All state lost | Persist `agentState` to sessionStorage, restore on mount |
-| Backend timeout | User waits indefinitely | Add "Cancel and retry" button using `agent.stop()` |
-| HITL session abandonment | Backend `request_info` hangs | Add frontend inactivity timer with auto-save warning |
-| API route crash | Unformatted HTTP 500 | Wrap POST handler in try/catch with structured error response |
+**Resilience coverage (all 5 gaps from the original gap analysis):**
+
+| Gap | Solution | Status |
+|-----|----------|--------|
+| Network disconnection during quiz | `useSessionStorage` for answers + index | ✅ |
+| Page reload during workflow | `useSessionStorage` for `agentState` + recovery banner | ✅ |
+| Backend timeout | Cancel button via `agent.stop()` in `SlowRunIndicator` | ✅ |
+| HITL session abandonment | `useInactivityTimer` in QuizSession (5 min) + OfferCard (2 min auto-decline) | ✅ |
+| API route crash | try/catch in POST handler with structured error response | ✅ |
 
 ---
 
@@ -679,7 +694,7 @@ readinessProbe:
 | ~~G10~~ | ~~Groundedness Evaluation~~ | ~~Medium~~ | ✅ **Implemented** |
 | ~~G12~~ | ~~Rate Limiting~~ | ~~Low~~ | ✅ **Implemented** |
 | ~~G14~~ | ~~Accessibility (WCAG)~~ | ~~Medium~~ | ✅ **Implemented** |
-| G15 | Frontend Error Resilience | Medium | Reliability |
+| ~~G15~~ | ~~Frontend Error Resilience~~ | ~~Medium~~ | ✅ **Implemented** |
 
 ### P3 — Low (Future Enhancement)
 
