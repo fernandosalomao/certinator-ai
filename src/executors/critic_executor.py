@@ -36,6 +36,7 @@ from executors.models import (
     RevisionRequest,
     SpecialistOutput,
 )
+from safety import validate_output
 
 logger = logging.getLogger(__name__)
 
@@ -142,6 +143,26 @@ class CriticExecutor(Executor):
                     output.iteration,
                     verdict.confidence,
                 )
+
+            # ── Output content safety gate (G2) ──────────────
+            # Run the approved text through the regex-based safety
+            # layer to catch harmful content or leaked credentials
+            # before it reaches the user.
+            safe_text = validate_output(text)
+            if safe_text != text:
+                logger.warning(
+                    "Output safety gate modified content from %s (content_type=%s)",
+                    output.source_executor_id,
+                    output.content_type,
+                )
+                metrics.output_safety_blocks.add(
+                    1,
+                    {
+                        "content_type": output.content_type,
+                        "source_executor": output.source_executor_id,
+                    },
+                )
+                text = safe_text
 
             # Build reasoning for the approved-content path.
             if auto_approved:

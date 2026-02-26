@@ -47,7 +47,7 @@ Gap analysis comparing the current implementation against the [project requireme
 | **Clear documentation** — agent roles, reasoning flow, tool integrations | ✅ Implemented | ARCHITECTURE.md with Mermaid diagrams, workflow.svg, inline docstrings | — |
 | **Evaluations, telemetry, monitoring** | ⚠️ Partial | OTel tracing, custom metrics (8 instruments), evaluation strategy documented but not implemented | G5, G6, G10 |
 | **Advanced reasoning patterns** (planner-executor, critics, reflection loops) | ✅ Implemented | All four patterns implemented | G7 (CoT for routing) |
-| **Responsible AI** (guardrails, validation, fallbacks) | ✅ Implemented | Critic gate, structured output, deterministic scoring, MCP fallback (CertInfo only), bounded loops, **InputGuardExecutor (regex-based)** | G2, G3, G11, G12 |
+| **Responsible AI** (guardrails, validation, fallbacks) | ✅ Implemented | Critic gate, structured output, deterministic scoring, MCP fallback (CertInfo only), bounded loops, **InputGuardExecutor (regex-based)**, **Output content safety in CriticExecutor** | G3, G11, G12 |
 
 ---
 
@@ -59,7 +59,7 @@ Gap analysis comparing the current implementation against the [project requireme
 | **Reasoning & Multi-step Thinking** | Strong | 5 reasoning patterns, typed message graph, conditional routing, revision loops | G7 (CoT audit trail for Coordinator) |
 | **Creativity & Originality** | Strong | Cross-route bidirectional flows (Practice ↔ StudyPlan), deterministic math offloading, dual-mode Practice agent, MCP fallback with disclaimer | — |
 | **User Experience & Presentation** | Good | CopilotKit v2 HITL, inline workflow progress, quiz session UI, offer cards | G13 (dynamic suggestions), G14 (accessibility), G17 (streaming) |
-| **Reliability & Safety** | Good | Bounded loops, transient error retry, question validation, structured output, **InputGuardExecutor (prompt injection + content safety + exam policy)** | G2, G4, G12, G15 |
+| **Reliability & Safety** | Good | Bounded loops, transient error retry, question validation, structured output, **InputGuardExecutor (prompt injection + content safety + exam policy)**, **Output content safety gate** | G4, G12, G15 |
 
 ---
 
@@ -103,15 +103,15 @@ flowchart TD
 | **Requirement** | Responsible AI — guardrails |
 | **Criterion** | Reliability & Safety |
 
-**Current state:** The Critic validates _quality_ (accuracy, structure, completeness) but not _safety_. A specialist could generate content that passes quality checks but contains harmful content.
+**Status: ✅ IMPLEMENTED** — Output content safety is enforced inside `CriticExecutor` via the `validate_output()` function from `safety.py`. After the Critic agent's quality review (PASS or auto-approve), but before content is emitted to the user or forwarded to `PostStudyPlanExecutor`, the approved text is run through:
 
-**Gap:** No content safety analysis on specialist outputs before delivery to the user.
+1. **Content safety checks** — regex-based detection of hate speech, violence, self-harm, sexual content, and illegal activity patterns.
+2. **Exam integrity policy** — blocks exam dump requests and score manipulation attempts in outputs.
+3. **Credential sanitisation** — redacts accidentally leaked API keys, tokens, and passwords.
 
-**Recommended approach:**
-- Add content safety analysis as a step within `CriticExecutor` (before emitting to user) or as a separate `OutputGuardExecutor` after the Critic
-- Use Azure AI Content Safety `/text:analyze` API for hate, self-harm, sexual, and violence categories
-- Set severity thresholds per category (e.g., reject >= 2 on any category)
-- This is complementary to the Critic agent's quality review
+If the output is flagged as unsafe, the text is replaced with a polite refusal. A `certinator.safety.output_blocks` OTel counter tracks blocked outputs by `content_type` and `source_executor`.
+
+This uses the same local regex-based approach as G1 (no Azure AI Content Safety API dependency).
 
 ---
 
@@ -530,7 +530,7 @@ flowchart LR
 
 | ID | Gap | Effort | Requirement |
 |----|-----|--------|-------------|
-| G2 | Output Content Safety | Medium | Responsible AI |
+| ~~G2~~ | ~~Output Content Safety~~ | ~~Medium~~ | ✅ **Implemented** |
 | G3 | MCP Fallback for LearningPathFetcher | Low | Responsible AI |
 | G4 | Cross-Route Cycle Breaker | Low | Reliability |
 | G5 | End-to-End Evaluations | High | Evaluations |
@@ -572,9 +572,9 @@ flowchart LR
 | Demoable experience | ✅ CopilotKit chat, HITL cards, progress | G14, G17 |
 | Clear documentation | ✅ ARCHITECTURE.md, workflow.svg, docstrings | — |
 | Evaluations & telemetry | ⚠️ OTel tracing + 8 custom metrics (implemented), evaluation harness (documented only) | G5, G6, G10 |
-| Responsible AI | ✅ Critic gate, structured output, deterministic scoring, MCP fallback (CertInfo only), bounded loops, **InputGuardExecutor** | G2, G3, G4, G11, G12, G19, G20 |
+| Responsible AI | ✅ Critic gate, structured output, deterministic scoring, MCP fallback (CertInfo only), bounded loops, **InputGuardExecutor**, **Output content safety gate** | G3, G4, G11, G12, G19, G20 |
 | Planner-Executor | ✅ Coordinator → specialists | — |
-| Critic / Verifier | ✅ CriticExecutor with structured verdict | G2, G6 |
+| Critic / Verifier | ✅ CriticExecutor with structured verdict + **output content safety gate** | G6 |
 | Self-reflection & Iteration | ✅ Revision loop with feedback | — |
 | Role-based specialization | ✅ 6 distinct agent roles | — |
 

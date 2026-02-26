@@ -143,3 +143,13 @@ safety_blocks = _meter.create_counter(
     ),
     unit="1",
 )
+
+output_safety_blocks = _meter.create_counter(
+    name="certinator.safety.output_blocks",
+    description=(
+        "Agent outputs blocked or sanitized by the output content "
+        "safety gate in CriticExecutor. "
+        "Attributes: content_type, source_executor."
+    ),
+    unit="1",
+)
