@@ -59,7 +59,7 @@ Gap analysis comparing the current implementation against the [project requireme
 | **Reasoning & Multi-step Thinking** | Strong | 5 reasoning patterns, typed message graph, conditional routing, revision loops, **Coordinator CoT audit trail (G7)** | — |
 | **Creativity & Originality** | Strong | Cross-route bidirectional flows (Practice ↔ StudyPlan), deterministic math offloading, dual-mode Practice agent, MCP fallback with disclaimer | — |
 | **User Experience & Presentation** | Good | CopilotKit v2 HITL, inline workflow progress, quiz session UI, offer cards | G13 (dynamic suggestions), G14 (accessibility), G17 (streaming) |
-| **Reliability & Safety** | Good | Bounded loops, transient error retry, question validation, structured output, **InputGuardExecutor (prompt injection + content safety + exam policy)**, **Output content safety gate**, **Cross-route cycle breaker (G4)** | G12, G15 |
+| **Reliability & Safety** | Good | Bounded loops, transient error retry, question validation, structured output, **InputGuardExecutor (prompt injection + content safety + exam policy)**, **Output content safety gate**, **Cross-route cycle breaker (G4)**, **Health check endpoints (G9)** | G12, G15 |
 
 ---
 
@@ -310,15 +310,51 @@ flowchart LR
 | **Effort** | Low (0.5 days) |
 | **Requirement** | Production readiness |
 | **Criterion** | Reliability & Safety |
+| **Status** | ✅ **Implemented** |
 
-**Current state:** No `/health` or `/ready` endpoints exist. Container orchestrators (Kubernetes, Azure Container Apps) cannot probe server readiness.
+**Implementation:** `/health` (liveness) and `/ready` (readiness) FastAPI endpoints in `app.py`, with dependency checks for LLM endpoint, MCP server, and thread store.
 
-**Gap:** No health check endpoint for production deployment.
+**What was built:**
+- **`/health` endpoint** (liveness probe) — returns HTTP 200 with `{"status": "alive"}` if the server process is running. Suitable for Kubernetes / Azure Container Apps liveness probes.
+- **`/ready` endpoint** (readiness probe) — returns HTTP 200 with `{"status": "ready"}` only when all dependencies pass. Returns HTTP 503 with `{"status": "not_ready"}` and per-check details when any dependency is unavailable.
+- **`_check_llm_endpoint()`** — probes the LLM endpoint via HTTP HEAD request (5s timeout). For `local` provider (FoundryLocal), returns implicit OK. Reports specific failure details (status code, error message).
+- **`_check_mcp_server()`** — probes `learn.microsoft.com/api/mcp` via HTTP HEAD request (5s timeout). Reports status code or network error.
+- **`_check_thread_store()`** — validates in-memory thread store availability and reports thread count. Designed for future extension when a persistent backend (Redis / Cosmos DB) is added.
+- **`_register_health_endpoints()`** — wires both endpoints onto the FastAPI app with OpenAPI metadata (summary, description, tags).
+- **17 unit tests** in `tests/test_health.py` — covering all check functions and endpoint integration via Starlette TestClient.
 
-**Recommended approach:**
-- Add `/health` (liveness probe) — returns 200 if the process is alive
-- Add `/ready` (readiness probe) — returns 200 only if LLM endpoint is reachable, MCP server is responsive, and thread store is connected
-- Wire as FastAPI endpoints in `app.py`
+**Response format:**
+
+```json
+// GET /health → 200
+{"status": "alive"}
+
+// GET /ready → 200 (all OK) or 503 (any failure)
+{
+  "status": "ready",
+  "checks": {
+    "llm_endpoint": {"ok": true, "detail": "status=200"},
+    "mcp_server": {"ok": true, "detail": "status=200"},
+    "thread_store": {"ok": true, "detail": "in-memory, threads=3"}
+  }
+}
+```
+
+**Kubernetes / Azure Container Apps usage:**
+```yaml
+livenessProbe:
+  httpGet:
+    path: /health
+    port: 8000
+  initialDelaySeconds: 5
+  periodSeconds: 10
+readinessProbe:
+  httpGet:
+    path: /ready
+    port: 8000
+  initialDelaySeconds: 10
+  periodSeconds: 15
+```
 
 ---
 
@@ -583,7 +619,7 @@ flowchart LR
 | ~~G6~~ | ~~Critic Calibration Evaluation~~ | ~~Medium~~ | ✅ **Implemented** |
 | ~~G7~~ | ~~Coordinator CoT Reasoning Field~~ | ~~Low~~ | ✅ **Implemented** |
 | G8 | Persistent Thread Store | Medium | Production Readiness |
-| G9 | Health Check Endpoints | Low | Production Readiness |
+| ~~G9~~ | ~~Health Check Endpoints~~ | ~~Low~~ | ✅ **Implemented** |
 | G10 | Groundedness Evaluation | Medium | Evaluations / Responsible AI |
 | G12 | Rate Limiting | Low | Responsible AI |
 | G14 | Accessibility (WCAG) | Medium | User Experience |
