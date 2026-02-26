@@ -88,9 +88,10 @@ class CoordinatorExecutor(Executor):
             return
         decision = self._extract_routing(response)
         logger.info(
-            "Routing → %s (cert=%s)",
+            "Routing → %s (cert=%s) | reasoning: %s",
             decision.route,
             decision.certification or "n/a",
+            (decision.reasoning or "")[:200],
         )
         metrics.routing_decisions.add(1, {"route": decision.route})
 
@@ -108,22 +109,8 @@ class CoordinatorExecutor(Executor):
         }
         route = decision.route if decision.route in route_totals else "general"
 
-        # Build a human-readable routing rationale for visible reasoning traces (G8).
-        cert_label = decision.certification or "unspecified exam"
-        task_snippet = (decision.task or "")[:100].rstrip()
-        context_snippet = (decision.context or "")[:80].rstrip()
-        if route == "certification-info":
-            reasoning = f"Routing to certification information — exam: {cert_label}" + (
-                f", task: {task_snippet}" if task_snippet else ""
-            )
-        elif route == "study-plan-generator":
-            reasoning = f"Routing to study plan workflow — exam: {cert_label}" + (
-                f", context: {context_snippet}" if context_snippet else ""
-            )
-        elif route == "practice-questions":
-            reasoning = f"Routing to practice questions — exam: {cert_label}"
-        else:
-            reasoning = "Answering directly — no specialist routing required."
+        # Use LLM-produced chain-of-thought reasoning (G7).
+        reasoning = decision.reasoning or ""
 
         await update_workflow_progress(
             ctx=ctx,

@@ -41,12 +41,12 @@ Gap analysis comparing the current implementation against the [project requireme
 | Requirement | Status | Evidence | Gaps |
 |-------------|--------|----------|------|
 | **Multi-agent system** aligned with PROJECT.md | ✅ Implemented | 6 agents, 8 executors, WorkflowBuilder graph | — |
-| **Reasoning** and multi-step decision-making | ✅ Implemented | Planner-Executor, Critic/Verifier, Self-reflection, Role-based specialization, Deterministic computation | G7 (CoT reasoning field) |
+| **Reasoning** and multi-step decision-making | ✅ Implemented | Planner-Executor, Critic/Verifier, Self-reflection, Role-based specialization, Deterministic computation, **Coordinator CoT reasoning field (G7)** | — |
 | **External tools, APIs, MCP** integration | ✅ Implemented | MS Learn MCP, `schedule_study_plan` @ai_function, `score_quiz` Python tool | G3 (LPF fallback), G18 (MCP caching) |
 | **Demoable** with clear agent interactions | ✅ Implemented | CopilotKit chat UI, workflow progress rendering, quiz cards, offer cards | G14 (accessibility) |
 | **Clear documentation** — agent roles, reasoning flow, tool integrations | ✅ Implemented | ARCHITECTURE.md with Mermaid diagrams, workflow.svg, inline docstrings | — |
 | **Evaluations, telemetry, monitoring** | ⚠️ Partial | OTel tracing, custom metrics (8 instruments), **end-to-end evaluation pipeline (6 custom evaluators, JSONL datasets, CLI orchestrator)**, **Critic calibration evaluation (precision/recall/F1)** | G10 |
-| **Advanced reasoning patterns** (planner-executor, critics, reflection loops) | ✅ Implemented | All four patterns implemented | G7 (CoT for routing) |
+| **Advanced reasoning patterns** (planner-executor, critics, reflection loops) | ✅ Implemented | All four patterns implemented, **Coordinator CoT reasoning (G7)** | — |
 | **Responsible AI** (guardrails, validation, fallbacks) | ✅ Implemented | Critic gate, structured output, deterministic scoring, MCP fallback (CertInfo only), bounded loops, **InputGuardExecutor (regex-based)**, **Output content safety in CriticExecutor** | G3, G11, G12 |
 
 ---
@@ -56,7 +56,7 @@ Gap analysis comparing the current implementation against the [project requireme
 | Criterion | Score | Strengths | Gaps |
 |-----------|-------|-----------|------|
 | **Accuracy & Relevance** | Strong | MCP-grounded retrieval, structured output, critic validation, deterministic scoring, **Critic calibration evaluation (G6)** | G10 (Groundedness evaluation) |
-| **Reasoning & Multi-step Thinking** | Strong | 5 reasoning patterns, typed message graph, conditional routing, revision loops | G7 (CoT audit trail for Coordinator) |
+| **Reasoning & Multi-step Thinking** | Strong | 5 reasoning patterns, typed message graph, conditional routing, revision loops, **Coordinator CoT audit trail (G7)** | — |
 | **Creativity & Originality** | Strong | Cross-route bidirectional flows (Practice ↔ StudyPlan), deterministic math offloading, dual-mode Practice agent, MCP fallback with disclaimer | — |
 | **User Experience & Presentation** | Good | CopilotKit v2 HITL, inline workflow progress, quiz session UI, offer cards | G13 (dynamic suggestions), G14 (accessibility), G17 (streaming) |
 | **Reliability & Safety** | Good | Bounded loops, transient error retry, question validation, structured output, **InputGuardExecutor (prompt injection + content safety + exam policy)**, **Output content safety gate** | G4, G12, G15 |
@@ -249,16 +249,17 @@ flowchart LR
 | **Effort** | Low (0.5 days) |
 | **Requirement** | Reasoning & multi-step thinking |
 | **Criterion** | Reasoning & Multi-step Thinking |
+| **Status** | ✅ **Implemented** |
 
-**Current state:** `CoordinatorResponse` has fields `route`, `task`, `certification`, `context`, `response` but no explicit `reasoning` field. The Coordinator makes a routing decision without explaining its rationale.
+**Implementation:** The Coordinator now produces a chain-of-thought `reasoning` field before selecting its `route`, creating an auditable trail for every routing decision.
 
-**Gap:** No audit trail for why the Coordinator chose a particular route. For ambiguous queries (e.g., "Tell me about AZ-104 and give me a study plan"), the rationale is opaque.
-
-**Recommended approach:**
-- Add a `reasoning: str` field to `CoordinatorResponse` (prompt-only change + model schema update)
-- The model fills this before `route`, creating a chain-of-thought trail
-- Log to OTel traces for debugging and evaluation
-- Display in the workflow progress (the `reasoning` field in `update_workflow_progress` already exists and is used by the frontend `WorkflowProgress` component)
+**What was built:**
+- **`reasoning` field added to `CoordinatorResponse`** (structured output schema with `extra="forbid"`) — placed before `route` so the LLM fills it first, enforcing think-before-act
+- **`reasoning` field added to `RoutingDecision`** — internal DTO carries the reasoning through the workflow graph
+- **Coordinator prompt updated** with a "Chain-of-Thought Reasoning" section instructing step-by-step justification: identify intent → note ambiguity → apply rules → justify choice
+- **Synthetic reasoning replaced** — `CoordinatorExecutor` now uses the LLM-produced `decision.reasoning` instead of a post-hoc template string
+- **OTel trace logging** — reasoning is included in the executor log line (`logger.info`) and streamed to the frontend via `update_workflow_progress(reasoning=...)`
+- **Frontend rendering** — already supported: `WorkflowProgress` component renders `progress.reasoning` as a muted sub-line (no frontend changes needed)
 
 ---
 
@@ -561,7 +562,7 @@ flowchart LR
 | ID | Gap | Effort | Requirement |
 |----|-----|--------|-------------|
 | ~~G6~~ | ~~Critic Calibration Evaluation~~ | ~~Medium~~ | ✅ **Implemented** |
-| G7 | Coordinator CoT Reasoning Field | Low | Reasoning |
+| ~~G7~~ | ~~Coordinator CoT Reasoning Field~~ | ~~Low~~ | ✅ **Implemented** |
 | G8 | Persistent Thread Store | Medium | Production Readiness |
 | G9 | Health Check Endpoints | Low | Production Readiness |
 | G10 | Groundedness Evaluation | Medium | Evaluations / Responsible AI |
@@ -588,7 +589,7 @@ flowchart LR
 | Requirement | Implemented | Gaps |
 |-------------|------------|------|
 | Multi-agent system | ✅ 6 agents, 8 executors, graph workflow | — |
-| Reasoning & multi-step thinking | ✅ 5 reasoning patterns | G7 |
+| Reasoning & multi-step thinking | ✅ 5 reasoning patterns, **Coordinator CoT (G7)** | — |
 | External tools, APIs, MCP | ✅ MS Learn MCP, schedule tool, score tool | G3, G18, G20 |
 | Demoable experience | ✅ CopilotKit chat, HITL cards, progress | G14, G17 |
 | Clear documentation | ✅ ARCHITECTURE.md, workflow.svg, docstrings | — |

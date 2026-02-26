@@ -18,6 +18,10 @@ from pydantic import BaseModel, ConfigDict, Field
 class RoutingDecision(BaseModel):
     """Structured routing decision produced by the Coordinator agent."""
 
+    reasoning: str = Field(
+        default="",
+        description="Chain-of-thought explanation of the routing decision.",
+    )
     route: Literal[
         "certification-info", "study-plan-generator", "practice-questions", "general"
     ] = Field(
@@ -45,6 +49,14 @@ class CoordinatorResponse(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
+    reasoning: str = Field(
+        description=(
+            "Chain-of-thought explanation of the routing decision. "
+            "Think step-by-step: identify the user's primary intent, "
+            "note any ambiguity or multiple intents, then justify the "
+            "chosen route. Fill this BEFORE selecting the route."
+        ),
+    )
     route: Literal[
         "certification-info", "study-plan-generator", "practice-questions", "general"
     ] = Field(
