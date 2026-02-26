@@ -88,8 +88,18 @@ class PostStudyPlanExecutor(Executor):
             status="completed",
         )
 
-        # Stream the approved study plan text to the user.
-        await emit_response(ctx, self.id, approved.content)
+        # G17: When the study plan was already streamed
+        # token-by-token to the user during generation, skip
+        # the duplicate emit.  Only re-emit when content was
+        # modified (safety gate / auto-approve disclaimer) or
+        # never streamed (revision path).
+        if approved.pre_streamed:
+            logger.info(
+                "PostStudyPlan skipping emit — content was "
+                "pre-streamed by specialist executor.",
+            )
+        else:
+            await emit_response(ctx, self.id, approved.content)
 
         cert = approved.certification or "your certification"
 

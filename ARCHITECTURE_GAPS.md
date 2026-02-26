@@ -592,15 +592,51 @@ readinessProbe:
 | **Effort** | Medium (2-3 days) |
 | **Requirement** | User Experience & Presentation |
 | **Criterion** | User Experience & Presentation |
+| **Status** | ✅ **Implemented** |
 
-**Current state:** All agents are called with `agent.run()` (non-streaming). The full response is generated server-side before being sent to the frontend, causing perceived latency for long responses (cert info, study plans).
+**Implementation:** Token-by-token streaming from specialist agents (CertInfo, StudyPlan) to the frontend via `agent.run_stream()` and AG-UI events, replacing the previous batch `agent.run()` pattern.
 
-**Gap:** No token-by-token streaming from specialist agents to the frontend.
+**What was built:**
+- **`safe_agent_run_stream()`** (`src/executors/__init__.py`) — streaming counterpart to `safe_agent_run()` with identical retry semantics (5 attempts, exponential backoff). Wraps `agent.run_stream()` and yields `AgentRunResponseUpdate` chunks. On transient errors the full stream is restarted.
+- **`stream_and_accumulate()`** (`src/executors/__init__.py`) — streams agent tokens to the user via `AgentRunUpdateEvent`s for progressive CopilotKit rendering, while accumulating the full text for downstream Critic validation. Returns the complete accumulated response.
+- **`pre_streamed` flag on `SpecialistOutput`** (`src/executors/models.py`) — boolean flag set to `True` when content was streamed token-by-token during generation. Flows through to `ApprovedStudyPlanOutput` for the study plan path.
+- **`CertificationInfoExecutor`** — `_fetch_cert_info()` and `_fetch_cert_info_general()` now use `stream_and_accumulate()` instead of `safe_agent_run()` + `extract_response_text()`. Initial requests stream tokens; revisions use non-streaming `safe_agent_run()` (revision content replaces previously displayed text).
+- **`StudyPlanGeneratorExecutor`** — `_generate_plan()` streams the LLM formatting step via `stream_and_accumulate()` (the deterministic `schedule_study_plan` computation still runs synchronously). Initial requests stream; revisions use non-streaming.
+- **`CriticExecutor`** — on PASS, skips `emit_response()` when `output.pre_streamed` is `True` and content was not modified by the safety gate or auto-approve disclaimer. Re-emits only when content was modified or never streamed (revision path).
+- **`PostStudyPlanExecutor`** — skips duplicate `emit_response()` for study plans that were already streamed, using `approved.pre_streamed` flag.
 
-**Recommended approach:**
-- Use `agent.run_stream()` for specialist agents (CertInfo, StudyPlan) to stream tokens as they're generated
-- This requires changes in executor handlers to consume the stream and forward events
-- The AG-UI protocol and CopilotKit already support streaming text
+**Streaming architecture (stream-then-validate):**
+
+```
+Specialist (CertInfo/StudyPlan)
+    │  run_stream() → token chunks → AgentRunUpdateEvent → AG-UI → CopilotKit
+    │  (user sees progressive text)
+    │  accumulated text
+    ▼
+SpecialistOutput(pre_streamed=True)
+    │
+    ▼
+CriticExecutor
+    ├── PASS + pre_streamed + unmodified → skip emit (already displayed)
+    ├── PASS + modified (safety/disclaimer) → re-emit full text
+    └── FAIL → RevisionRequest → specialist re-generates (non-streaming)
+```
+
+**Which agents stream:**
+
+| Agent | Streams? | Rationale |
+|---|---|---|
+| CertificationInfoAgent | ✅ Yes | Long cert info responses (1000+ tokens) |
+| StudyPlanGeneratorAgent | ✅ Yes | Long study plan Markdown (1500+ tokens) |
+| CriticAgent | No | Structured output (`response_format`); internal, not user-facing |
+| CoordinatorAgent | No | Structured output (`response_format`) |
+| PracticeQuestionsAgent | No | Structured output (quiz JSON) |
+| LearningPathFetcherAgent | No | Internal pipeline node; output goes to StudyPlanGenerator |
+
+**Design decisions:**
+- **Stream-then-validate** — tokens stream to user during generation; Critic validates the full accumulated text afterward. In the common case (Critic PASS), the user already has the complete response with zero additional latency.
+- **Revision path stays non-streaming** — when Critic requests revision, the revised content replaces what was shown, so re-streaming is unnecessary. The non-streaming `safe_agent_run()` simplifies the revision flow.
+- **`pre_streamed` flag** — avoids duplicate text emission at the Critic/PostStudyPlan emit points without changing the workflow graph topology.
 
 ---
 
@@ -703,7 +739,7 @@ readinessProbe:
 | G11 | PII Detection in Telemetry | Low | Responsible AI |
 | G13 | Dynamic Suggestions | Low | User Experience |
 | G16 | Frontend Testing | High | Reliability |
-| G17 | Agent Streaming | Medium | User Experience |
+| ~~G17~~ | ~~Agent Streaming~~ | ~~Medium~~ | ✅ **Implemented** |
 | G18 | MCP Result Caching | Low | Performance |
 | G19 | Token Budget Controls | Low | Responsible AI |
 | G20 | Citation Tracking | Medium | Responsible AI |
@@ -717,7 +753,7 @@ readinessProbe:
 | Multi-agent system | ✅ 6 agents, 8 executors, graph workflow | — |
 | Reasoning & multi-step thinking | ✅ 5 reasoning patterns, **Coordinator CoT (G7)** | — |
 | External tools, APIs, MCP | ✅ MS Learn MCP, schedule tool, score tool | G18, G20 |
-| Demoable experience | ✅ CopilotKit chat, HITL cards, progress, **WCAG accessibility (G14)** | G17 |
+| Demoable experience | ✅ CopilotKit chat, HITL cards, progress, **WCAG accessibility (G14)**, **Agent streaming (G17)** | — |
 | Clear documentation | ✅ ARCHITECTURE.md, workflow.svg, docstrings | — |
 | Evaluations & telemetry | ✅ OTel tracing + 8 custom metrics, **E2E evaluation pipeline (7 evaluators, JSONL datasets, CLI)**, **Critic calibration (precision/recall/F1)**, **Groundedness evaluation (G10)** | — |
 | Responsible AI | ✅ Critic gate, structured output, deterministic scoring, MCP fallback (CertInfo + LearningPathFetcher), bounded loops, **InputGuardExecutor**, **Output content safety gate**, **Rate limiting (G12)** | G4, G11, G19, G20 |

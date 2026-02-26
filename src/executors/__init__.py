@@ -6,6 +6,7 @@ Shared utilities used by all executor modules.
 
 import json
 import logging
+from collections.abc import AsyncIterable
 from datetime import datetime, timezone
 from typing import Any
 from uuid import uuid4
@@ -13,6 +14,7 @@ from uuid import uuid4
 from agent_framework import (
     AgentRunResponseUpdate,
     AgentRunUpdateEvent,
+    ChatMessage,
     FunctionCallContent,
     FunctionResultContent,
     Role,
@@ -136,6 +138,100 @@ async def safe_agent_run(agent: Any, *args: Any, **kwargs: Any) -> Any:
                     attempt_number,
                 )
             return await agent.run(*args, **kwargs)
+
+
+# ---------------------------------------------------------------------------
+# Streaming agent runner with retry
+# ---------------------------------------------------------------------------
+
+
+async def safe_agent_run_stream(
+    agent: Any,
+    *args: Any,
+    **kwargs: Any,
+) -> AsyncIterable[AgentRunResponseUpdate]:
+    """Stream agent responses with automatic retry on transient failures.
+
+    Wraps ``agent.run_stream(*args, **kwargs)`` with up to 5 attempts.
+    On retry the entire stream is restarted — no partial state is
+    committed because callers accumulate text independently.
+
+    Parameters:
+        agent (Any): Agent with an async ``run_stream()`` method.
+        *args (Any): Positional arguments forwarded to
+            ``agent.run_stream()``.
+        **kwargs (Any): Keyword arguments forwarded to
+            ``agent.run_stream()``.
+
+    Yields:
+        AgentRunResponseUpdate: Incremental response chunks.
+
+    Raises:
+        Exception: Any non-transient exception, or the final
+            transient exception after all retries are exhausted.
+    """
+    attempt_number = 0
+    async for attempt in AsyncRetrying(
+        retry=retry_if_exception(_is_transient_error),
+        stop=stop_after_attempt(5),
+        wait=wait_exponential(multiplier=2, min=1, max=30),
+        reraise=True,
+    ):
+        with attempt:
+            attempt_number += 1
+            if attempt_number > 1:
+                logger.warning(
+                    "safe_agent_run_stream: retrying (attempt %d/5)",
+                    attempt_number,
+                )
+            async for update in agent.run_stream(*args, **kwargs):
+                yield update
+
+
+async def stream_and_accumulate(
+    ctx: WorkflowContext,
+    executor_id: str,
+    agent: Any,
+    messages: list[ChatMessage],
+    fallback: str = "",
+) -> str:
+    """Stream agent tokens to the user while accumulating full text.
+
+    Calls ``agent.run_stream()`` (via :func:`safe_agent_run_stream`)
+    and emits each text chunk as an ``AgentRunUpdateEvent`` so the
+    AG-UI event bridge forwards it to CopilotKit for progressive
+    rendering.  Simultaneously accumulates the complete text for
+    downstream processing (e.g. Critic validation).
+
+    Parameters:
+        ctx (WorkflowContext): Current workflow context.
+        executor_id (str): Identifier of the emitting executor.
+        agent (Any): Agent with ``run_stream()`` capability.
+        messages (list[ChatMessage]): Prompt messages for the agent.
+        fallback (str): Text returned when no content is streamed.
+
+    Returns:
+        str: The full accumulated response text, or *fallback* when
+        the stream produced no text content.
+    """
+    accumulated = ""
+    response_id = str(uuid4())
+    async for update in safe_agent_run_stream(agent, messages):
+        for content in getattr(update, "contents", None) or []:
+            text = getattr(content, "text", None)
+            if isinstance(text, str) and text:
+                accumulated += text
+                await ctx.add_event(
+                    AgentRunUpdateEvent(
+                        executor_id,
+                        data=AgentRunResponseUpdate(
+                            contents=[TextContent(text=text)],
+                            role=Role.ASSISTANT,
+                            response_id=response_id,
+                        ),
+                    )
+                )
+    return accumulated if accumulated.strip() else fallback
 
 
 def extract_response_text(

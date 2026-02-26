@@ -33,6 +33,7 @@ from executors import (
     emit_response,
     extract_response_text,
     safe_agent_run,
+    stream_and_accumulate,
     update_workflow_progress,
 )
 from executors.models import LearningPathsData, RevisionRequest, SpecialistOutput
@@ -97,7 +98,7 @@ class StudyPlanGeneratorExecutor(Executor):
             total_steps=5,
         )
         try:
-            plan_text = await self._generate_plan(data)
+            plan_text = await self._generate_plan(data, ctx)
         except Exception as exc:
             logger.error(
                 "StudyPlanGenerator agent call failed: %s",
@@ -117,6 +118,7 @@ class StudyPlanGeneratorExecutor(Executor):
                 source_executor_id=self.id,
                 iteration=1,
                 original_decision=data.original_decision,
+                pre_streamed=True,
             )
         )
 
@@ -162,7 +164,10 @@ class StudyPlanGeneratorExecutor(Executor):
             cert,
         )
         try:
-            response = await safe_agent_run(self.study_plan_agent, plan_messages)
+            response = await safe_agent_run(
+                self.study_plan_agent,
+                plan_messages,
+            )
         except Exception as exc:
             logger.error(
                 "StudyPlanGenerator revision agent call failed: %s",
@@ -187,6 +192,7 @@ class StudyPlanGeneratorExecutor(Executor):
                 source_executor_id=self.id,
                 iteration=revision.iteration,
                 original_decision=revision.original_decision,
+                pre_streamed=False,
             )
         )
 
@@ -197,12 +203,20 @@ class StudyPlanGeneratorExecutor(Executor):
     async def _generate_plan(
         self,
         data: LearningPathsData,
+        ctx: WorkflowContext,
     ) -> str:
-        """
-        Build a prompt with topics JSON + context and run the agent.
+        """Build a prompt with topics JSON + context and stream the
+        agent response.
+
+        The deterministic schedule computation (``schedule_study_plan``)
+        runs first, then the LLM formats it as Markdown.  Only the
+        LLM formatting step is streamed token-by-token via
+        ``stream_and_accumulate`` so the user sees progressive output.
 
         Parameters:
-            data (LearningPathsData): Topics and original routing decision.
+            data (LearningPathsData): Topics and original routing
+                decision.
+            ctx (WorkflowContext): Workflow context for streaming.
 
         Returns:
             str: Generated study plan in Markdown format.
@@ -245,9 +259,15 @@ class StudyPlanGeneratorExecutor(Executor):
         )
         plan_messages = [ChatMessage(role=Role.USER, text=prompt)]
 
-        logger.info("StudyPlanGenerator: generating plan for %s", cert)
+        logger.info("StudyPlanGenerator: streaming plan for %s", cert)
         try:
-            response = await safe_agent_run(self.study_plan_agent, plan_messages)
+            plan_text = await stream_and_accumulate(
+                ctx=ctx,
+                executor_id=self.id,
+                agent=self.study_plan_agent,
+                messages=plan_messages,
+                fallback=("I could not generate a study plan at this time."),
+            )
         except Exception as exc:
             logger.error(
                 "StudyPlanGenerator agent call failed for %s: %s",
@@ -256,10 +276,6 @@ class StudyPlanGeneratorExecutor(Executor):
                 exc_info=True,
             )
             raise
-        plan_text = extract_response_text(
-            response,
-            fallback="I could not generate a study plan at this time.",
-        )
         if self._looks_like_json(plan_text):
             logger.warning(
                 "StudyPlanGenerator: agent returned JSON; using deterministic Markdown fallback"
