@@ -10,7 +10,7 @@ Help me create a detailed architecture for the Certinator AI project, a multi-ag
 
 Delegate to subagent `AIAgentExpert` when is needed as he is the AI Expert (specially in Microsoft Agent Framework and Azure AI Foundry) and can help with best practices, patterns, and technical guidance.
 
-Delegate to subagent `NextCopilotKitExpert` when is needed as he is the expert in the latest capabilities of the Microsoft Copilot SDKs, including agent development, tool integrations, and best practices.
+Delegate to subagent `NextCopilotKitExpert` when is needed as he is the expert in the latest capabilities of the CopilotKit SDKs, including agent development, tool integrations, and best practices.
 
 The outcome will be used to increment the [Architecture Documentation](../../ARCHITECTURE.md) documentation, so please ensure the architecture plan is comprehensive and well-structured. This will be used for implementation, so include technical details, agent roles, interactions, and tool integrations.
 

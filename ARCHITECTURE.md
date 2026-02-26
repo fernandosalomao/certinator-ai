@@ -9,11 +9,14 @@ Multi-agent workflow system for Microsoft certification exam preparation, built 
 - [High-Level Overview](#high-level-overview)
 - [Workflow Graph Topology](#workflow-graph-topology)
 - [Layer Architecture](#layer-architecture)
+- [Frontend Architecture](#frontend-architecture)
 - [Reasoning Patterns](#reasoning-patterns)
 - [HITL (Human-in-the-Loop) Pattern](#hitl-human-in-the-loop-pattern)
 - [Critic Validation Loop](#critic-validation-loop)
+- [Custom OTel Metrics](#custom-otel-metrics)
 - [Evaluations & Telemetry](#evaluations--telemetry)
 - [Responsible AI](#responsible-ai)
+- [Deployment Architecture](#deployment-architecture)
 - [File Structure](#file-structure)
 - [Design Principles](#design-principles)
 
@@ -279,10 +282,37 @@ All inter-executor messages are typed Pydantic models or dataclasses.
 
 ### 7. Configuration — `src/config.py`
 
+Centralised configuration loaded from environment variables with multi-provider LLM support.
+
 | Variable | Env Var | Default | Description |
 |----------|---------|---------|-------------|
-| `FOUNDRY_PROJECT_ENDPOINT` | `FOUNDRY_PROJECT_ENDPOINT` | `""` | Azure AI Foundry project endpoint |
+| `LLM_PROVIDER` | `LLM_PROVIDER` | `"azure"` | LLM backend: `azure`, `github`, or `local` |
+| `LLM_ENDPOINT` | `LLM_ENDPOINT` | Provider-dependent | Azure AI Foundry endpoint or GitHub Models inferencing URL |
+| `LLM_MODEL_DEFAULT` | `LLM_MODEL_DEFAULT` | Per-provider | Default model for all agents (e.g., `gpt-4.1`, `openai/gpt-4o`, `qwen2.5-14b`) |
+| `LLM_MODEL_COORDINATOR` | `LLM_MODEL_COORDINATOR` | `LLM_MODEL_DEFAULT` | Per-agent model override |
+| `LLM_MODEL_CERTIFICATION_INFO` | `LLM_MODEL_CERTIFICATION_INFO` | `LLM_MODEL_DEFAULT` | Per-agent model override |
+| `LLM_MODEL_CRITIC` | `LLM_MODEL_CRITIC` | `LLM_MODEL_DEFAULT` | Per-agent model override |
+| `LLM_MODEL_LEARNING_PATH_FETCHER` | `LLM_MODEL_LEARNING_PATH_FETCHER` | `LLM_MODEL_DEFAULT` | Per-agent model override |
+| `LLM_MODEL_PRACTICE_QUESTIONS` | `LLM_MODEL_PRACTICE_QUESTIONS` | `LLM_MODEL_DEFAULT` | Per-agent model override |
+| `LLM_MODEL_STUDY_PLAN_GENERATOR` | `LLM_MODEL_STUDY_PLAN_GENERATOR` | `LLM_MODEL_DEFAULT` | Per-agent model override |
 | `DEFAULT_PRACTICE_QUESTIONS` | `DEFAULT_PRACTICE_QUESTIONS` | `10` | Default quiz size |
+| `GENERATE_WORKFLOW_VISUALIZATION` | `GENERATE_WORKFLOW_VISUALIZATION` | `false` | Generate Mermaid + SVG on startup |
+| `AGUI_HOST` | `AGUI_HOST` | `127.0.0.1` | AG-UI server bind host |
+| `AGUI_PORT` | `AGUI_PORT` | `8000` | AG-UI server bind port |
+| `GITHUB_TOKEN` | `GITHUB_TOKEN` | `""` | Required when `LLM_PROVIDER=github` |
+
+**Multi-provider support:**
+
+```mermaid
+graph LR
+    CONFIG[config.py] --> AZURE[Azure AI Foundry<br/>AzureAIClient]
+    CONFIG --> GITHUB[GitHub Models<br/>OpenAIChatClient]
+    CONFIG --> LOCAL[FoundryLocal<br/>OpenAIChatClient]
+
+    AZURE -->|DefaultAzureCredential| FOUNDRY[Azure AI Endpoint]
+    GITHUB -->|GITHUB_TOKEN| GH[models.github.ai]
+    LOCAL -->|foundry-local-sdk| FL[Local FoundryLocal Service]
+```
 
 ### 8. Frontend — `frontend/`
 
@@ -292,27 +322,113 @@ Next.js + CopilotKit application. The API route (`app/api/copilotkit/route.ts`) 
 |---------|---------|-------------|
 | `CERTINATOR_AGENT_URL` / `AGENT_URL` | `http://127.0.0.1:8000/` | Backend agent HTTP endpoint |
 
-### CopilotKit Integration (Frontend ↔ Backend Glue)
+### CopilotKit v2 Integration (Frontend ↔ Backend Glue)
 
-The frontend uses CopilotKit hooks to bridge the MAF backend with a rich React UI. The AG-UI protocol is the transport layer between CopilotKit and the Agent Framework HTTP server.
+The frontend uses CopilotKit v2 hooks to bridge the MAF backend with a rich React UI. The AG-UI protocol is the transport layer between CopilotKit and the Agent Framework HTTP server.
 
-| CopilotKit Feature | Hook / Component | Purpose |
+| CopilotKit v2 Feature | Hook / Component | Purpose |
 |--------------------|-----------------|---------|
-| **Human-in-the-Loop** | `useHumanInTheLoop("quiz_answer")` | Renders a `QuizCard` with clickable A/B/C/D buttons instead of typing answers in chat |
-| **Human-in-the-Loop** | `useHumanInTheLoop("study_plan_offer")` | Renders an `OfferCard` with "Create study plan" / "Maybe later" buttons after a failed quiz |
-| **Human-in-the-Loop** | `useHumanInTheLoop("practice_offer")` | Renders an `OfferCard` with "Start practice" / "Not now" buttons after a study plan is delivered |
-| **Shared State (Read)** | `useCoAgent` | Reads `active_quiz_state` from the backend's shared state to drive the `QuizDashboard` component outside the chat |
-| **Agent State Render** | `useCoAgentStateRender` | Renders quiz progress inline in the chat window as the student answers questions |
-| **Readables** | `useCopilotReadable` | Exposes user preferences (difficulty, question count, locale) as context that the backend agent can use |
+| **Human-in-the-Loop** | `useHumanInTheLoop("request_info")` | Single dispatch hook — routes by `data.type` to `QuizSession`, `OfferCard` (study plan offer), or `OfferCard` (practice offer) |
+| **Shared State (Read)** | `useAgent` | Reads `active_quiz_state` and `workflow_progress` from the backend's shared state |
+| **Tool Renderer** | `useRenderTool("update_workflow_progress")` | Renders `WorkflowProgress` inline in the chat — one row per backend step |
+| **Tool Renderer** | `useRenderTool("update_active_quiz_state")` | Renders `QuizDashboard` inline when quiz completes |
+| **Agent Context** | `useAgentContext` | Exposes user preferences (difficulty, question count, locale) as context the backend agent can use |
+| **Suggestions** | `useConfigureSuggestions` | Static suggestions: AZ-104 overview, AI-900 study plan, AI-102 practice quiz |
 
 **Component mapping:**
 
 | Component | CopilotKit Hook | Renders |
 |-----------|----------------|---------|
 | `CertinatorHooks` | All hooks above | Invisible — registers all hooks inside the CopilotKit provider |
-| `QuizCard` | `useHumanInTheLoop` | Multiple-choice question with option buttons |
+| `QuizSession` | `useHumanInTheLoop` | Full quiz UI: progress bar, question navigator, A/B/C/D buttons, submit |
+| `QuizCard` | (Used by QuizSession) | Individual question card with clickable answer options |
 | `OfferCard` | `useHumanInTheLoop` | Yes/No decision card for study plan and practice offers |
-| `QuizDashboard` | `useCoAgent` | Progress bar, topic badges, and current question indicator |
+| `QuizDashboard` | `useAgent` + `useRenderTool` | Post-quiz summary: score, per-topic breakdown, question-by-question results |
+| `WorkflowProgress` | `useRenderTool` | Step-by-step workflow progress with spinner and reasoning |
+| `SlowRunIndicator` | `useAgent` (isRunning) | Warning indicator shown after 30s of active agent run |
+
+---
+
+## Frontend Architecture
+
+### Component Architecture
+
+```mermaid
+graph TD
+    subgraph "CopilotKit Provider"
+        subgraph "Page (Client Component)"
+            HERO[Hero Section<br/>Feature Cards]
+            DASHBOARD[QuizDashboard<br/>Post-Quiz Summary]
+            CHAT[CopilotChat<br/>agentId=my_agent]
+        end
+
+        subgraph "CertinatorHooks (Invisible)"
+            AGENT_HOOK[useAgent<br/>Shared State]
+            HITL_HOOK[useHumanInTheLoop<br/>request_info]
+            RENDER_WP[useRenderTool<br/>update_workflow_progress]
+            RENDER_QS[useRenderTool<br/>update_active_quiz_state]
+            CTX_HOOK[useAgentContext<br/>User Preferences]
+            SUG_HOOK[useConfigureSuggestions<br/>Static Suggestions]
+        end
+
+        subgraph "Inline Chat Components"
+            WP[WorkflowProgress<br/>Step-by-step status]
+            QS[QuizSession<br/>Full quiz experience]
+            OC[OfferCard<br/>Yes/No decisions]
+        end
+    end
+
+    AGENT_HOOK -->|state change| DASHBOARD
+    HITL_HOOK -->|quiz_session| QS
+    HITL_HOOK -->|study_plan_offer| OC
+    HITL_HOOK -->|practice_offer| OC
+    RENDER_WP --> WP
+    RENDER_QS --> DASHBOARD
+```
+
+### AG-UI Protocol Bridge
+
+The backend uses synthetic tool calls to push state updates to the frontend:
+
+```mermaid
+sequenceDiagram
+    participant Backend as MAF Backend
+    participant AGUI as AG-UI Protocol
+    participant CK as CopilotKit v2
+    participant UI as React Components
+
+    Backend->>Backend: emit_state_snapshot(tool_name, state_value)
+    Backend->>AGUI: FunctionCallContent + FunctionResultContent
+    AGUI->>CK: STATE_SNAPSHOT event
+    CK->>UI: useAgent → agent.state updated
+    CK->>UI: useRenderTool → inline render triggered
+
+    Backend->>Backend: ctx.request_info(data, response_type)
+    Backend->>AGUI: RequestInfoEvent
+    AGUI->>CK: HITL request
+    CK->>UI: useHumanInTheLoop render
+    UI->>CK: respond(user_input)
+    CK->>AGUI: Tool result
+    AGUI->>Backend: @response_handler invoked
+```
+
+### predict_state_config Mapping
+
+| State Key | Synthetic Tool Name | Tool Argument | Description |
+|-----------|-------------------|---------------|-------------|
+| `workflow_progress` | `update_workflow_progress` | `progress` | Current workflow step progress |
+| `active_quiz_state` | `update_active_quiz_state` | `quiz_state` | Active quiz session state |
+| `post_study_plan_context` | `update_post_study_plan_context` | `context` | Post-study-plan context for HITL |
+
+### HITL Dispatch Pattern
+
+MAF's `WorkflowAgent` emits all HITL interactions with tool name `request_info`. The frontend registers a single `useHumanInTheLoop("request_info")` hook that dispatches to the correct component based on `data.type`:
+
+| `data.type` | Component | Interaction |
+|-------------|-----------|-------------|
+| `quiz_session` | `QuizSession` | Full quiz with progress bar, question navigator, A/B/C/D buttons |
+| `study_plan_offer` | `OfferCard` | "Create study plan" / "Maybe later" after failed quiz |
+| `practice_offer` | `OfferCard` | "Start practice" / "Not now" after study plan delivery |
 
 ---
 
@@ -349,48 +465,121 @@ All specialist outputs (except practice quizzes, which are self-contained) pass 
 
 ---
 
+## Deployment Architecture
+
+### Current Development Setup
+
+```mermaid
+graph TB
+    subgraph "Developer Machine"
+        FE[Next.js Dev Server<br/>localhost:3000]
+        BE[MAF AG-UI Server<br/>localhost:8000]
+        OTEL[AI Toolkit Trace Viewer<br/>gRPC port 4317]
+        INSPECTOR[Agent Inspector<br/>VS Code Extension]
+    end
+
+    subgraph "External Services"
+        FOUNDRY[Azure AI Foundry<br/>LLM Inference]
+        MCP_SVC[Microsoft Learn MCP<br/>learn.microsoft.com/api/mcp]
+    end
+
+    FE -- "AG-UI Protocol" --> BE
+    BE -- "OpenTelemetry gRPC" --> OTEL
+    BE --> FOUNDRY
+    BE --> MCP_SVC
+    INSPECTOR --> BE
+```
+
+### Run Modes
+
+| Mode | Command | Description |
+|------|---------|-------------|
+| **AG-UI** (default) | `python src/app.py --agui` | FastAPI AG-UI endpoint for CopilotKit frontend |
+| **HTTP server** | `python src/app.py` | FastAPI + Uvicorn for Agent Inspector |
+| **CLI** | `python src/app.py --cli` | Interactive REPL for terminal testing |
+
+### Thread Persistence
+
+Conversation threads are currently stored in an in-memory dictionary (`_thread_store`). Threads persist across requests within the same server process but are lost on restart.
+
+```mermaid
+graph LR
+    CK[CopilotKit] -->|thread_id| API[API Route]
+    API --> STORE{_thread_store<br/>dict}
+    STORE -->|existing| THREAD[AgentThread]
+    STORE -->|new| CREATE[Create AgentThread]
+```
+
+### Custom Orchestrator Chain
+
+The AG-UI integration uses a custom orchestrator chain to handle MAF's HITL pattern:
+
+```mermaid
+flowchart TD
+    REQ[Incoming AG-UI Request] --> RIO{RequestInfoOrchestrator}
+    RIO -->|pending requests| DIRECT[Direct agent.run_stream<br/>with tool results only]
+    RIO -->|no pending| CLEAN[Strip request_info artifacts<br/>+ predict-state tool calls]
+    CLEAN --> DEFAULT[DefaultOrchestrator]
+    DEFAULT --> HITL_O[HumanInTheLoopOrchestrator]
+    HITL_O --> AGENT[WorkflowAgent.run_stream]
+```
+
+---
+
 ## File Structure
 
 ```
 src/
 ├── app.py                          # Entrypoint (HTTP / AG-UI / CLI)
-├── config.py                       # Environment configuration
+├── config.py                       # Environment configuration (multi-provider)
+├── metrics.py                      # Custom OpenTelemetry metrics
 ├── workflow.py                     # Workflow graph builder
 ├── agents/
 │   ├── __init__.py                 # Re-exports all agent factories
 │   ├── coordinator_agent.py        # Intent classification (gpt-4.1-mini)
-│   ├── cert_info_agent.py          # Certification info (gpt-4.1 + MCP)
+│   ├── certification_info_agent.py # Certification info (gpt-4.1 + MCP)
 │   ├── learning_path_fetcher_agent.py  # Topic extraction (gpt-4.1 + MCP)
-│   ├── study_plan_agent.py         # Study plan formatting (gpt-4.1)
-│   ├── practice_agent.py           # Question gen + feedback (gpt-4.1)
-│   └── critic_agent.py             # Quality validation (gpt-4.1-mini)
+│   ├── study_plan_generator_agent.py   # Study plan formatting (gpt-4.1)
+│   ├── practice_questions_agent.py # Question gen + feedback (gpt-4.1)
+│   └── critic_agent.py            # Quality validation (gpt-4.1-mini)
 ├── executors/
-│   ├── __init__.py                 # Shared helpers (emit_response, etc.)
-│   ├── models.py                   # All typed data models
-│   ├── coordinator.py              # CoordinatorRouter
-│   ├── cert_info.py                # CertInfoHandler
-│   ├── learning_path_fetcher.py    # LearningPathFetcherHandler
-│   ├── study_plan.py               # StudyPlanSchedulerHandler
-│   ├── critic.py                   # CriticExecutor
-│   ├── post_study_plan.py          # PostStudyPlanHandler (HITL)
-│   └── practice.py                 # PracticeQuizOrchestrator (HITL)
+│   ├── __init__.py                 # Shared helpers (emit_response, safe_agent_run, etc.)
+│   ├── models.py                   # All typed data models (Pydantic)
+│   ├── coordinator_executor.py     # CoordinatorRouter
+│   ├── certification_info_executor.py  # CertInfoHandler (+ MCP fallback)
+│   ├── learning_path_fetcher_executor.py # LearningPathFetcherHandler
+│   ├── study_plan_generator_executor.py  # StudyPlanSchedulerHandler
+│   ├── critic_executor.py          # CriticExecutor
+│   ├── post_study_plan_executor.py # PostStudyPlanHandler (HITL)
+│   └── practice_questions_executor.py  # PracticeQuizOrchestrator (HITL)
 ├── tools/
 │   ├── __init__.py
-│   ├── mcp.py                      # MS Learn MCP tool factory
-│   ├── practice.py                 # Deterministic quiz scoring
+│   ├── mcp.py                      # MS Learn MCP tool factory + is_mcp_error
+│   ├── practice.py                 # Deterministic quiz scoring + validation
 │   └── schedule.py                 # Study plan scheduling (@ai_function)
+├── utils/
+│   └── delete_foundry_agents.py    # Utility for cleaning up Foundry agents
 frontend/
 ├── app/
-│   ├── page.tsx                    # Main UI + quiz dashboard
-│   ├── layout.tsx                  # Root layout (CopilotKit provider)
+│   ├── page.tsx                    # Main UI — hero, quiz dashboard, CopilotChat
+│   ├── layout.tsx                  # Root layout — CopilotKit provider, dark theme
 │   ├── types.ts                    # Shared TS types (mirrors models.py)
-│   ├── globals.css                 # Global styles (incl. quiz/offer cards)
+│   ├── globals.css                 # Global styles (quiz cards, offer cards, etc.)
 │   ├── components/
-│   │   ├── CertinatorHooks.tsx     # All CopilotKit hook registrations
-│   │   ├── QuizCard.tsx            # HITL quiz answer card (A/B/C/D buttons)
+│   │   ├── CertinatorHooks.tsx     # All CopilotKit v2 hook registrations
+│   │   ├── CopilotKitProvider.tsx  # CopilotKit provider configuration
+│   │   ├── QuizSession.tsx         # Full quiz UI (progress, navigator, options)
+│   │   ├── QuizCard.tsx            # Individual quiz question card
 │   │   ├── OfferCard.tsx           # HITL yes/no offer card
-│   │   └── QuizDashboard.tsx       # Real-time quiz progress panel
+│   │   ├── QuizDashboard.tsx       # Post-quiz summary panel
+│   │   ├── WorkflowProgress.tsx    # Step-by-step workflow status in chat
+│   │   ├── WorkflowProgressContext.tsx # React context for workflow progress
+│   │   ├── SlowRunIndicator.tsx    # Warning after 30s active run
+│   │   └── ErrorBoundary.tsx       # React error boundary
 │   └── api/copilotkit/route.ts     # CopilotKit → Agent Framework bridge
+├── patches/
+│   └── @copilotkitnext__react@1.52.0-next.8.patch  # SDK patch
+└── public/                         # Static assets
 ```
 
 ---
@@ -482,6 +671,61 @@ The `StudyPlanGeneratorExecutor` calls `schedule_study_plan()` **directly as Pyt
 
 ---
 
+## Custom OTel Metrics
+
+All custom metrics are defined in `src/metrics.py` as module-level singletons, created via the OpenTelemetry `metrics.get_meter("certinator_ai", "1.0.0")` API. Instruments are created once and reused across executors.
+
+### Metrics Catalog
+
+| Metric | Type | Attributes | Emitted by |
+|--------|------|-----------|------------|
+| `certinator.critic.verdicts` | Counter | `verdict`, `content_type`, `auto_approved` | `CriticExecutor` — on every PASS/FAIL verdict |
+| `certinator.coordinator.routing_decisions` | Counter | `route` | `CoordinatorExecutor` — on every routing decision |
+| `certinator.quiz.score_pct` | Histogram | `certification` | `PracticeQuestionsExecutor` — overall quiz score (0–100) |
+| `certinator.quiz.topic_score_pct` | Histogram | `topic`, `certification` | `PracticeQuestionsExecutor` — per-topic score (0–100) |
+| `certinator.hitl.study_plan_offers` | Counter | `accepted` | `PracticeQuestionsExecutor` — post-quiz study plan offer responses |
+| `certinator.hitl.practice_offers` | Counter | `accepted` | `PostStudyPlanExecutor` — post-study-plan practice offer responses |
+| `certinator.mcp.calls` | Counter | `executor`, `status` | `CertInfoExecutor`, `LearningPathFetcherExecutor` — MCP call outcomes |
+| `certinator.mcp.unavailable_events` | Counter | `executor`, `degraded` | `CertInfoExecutor`, `LearningPathFetcherExecutor` — MCP unavailability triggers |
+
+### Metrics Flow
+
+```mermaid
+flowchart LR
+    subgraph Executors
+        CE[CoordinatorExecutor]
+        CIE[CertInfoExecutor]
+        LPFE[LearningPathFetcherExecutor]
+        CRE[CriticExecutor]
+        PQE[PracticeQuestionsExecutor]
+        PSPE[PostStudyPlanExecutor]
+    end
+
+    subgraph "metrics.py"
+        RD[routing_decisions]
+        CV[critic_verdicts]
+        QS[quiz_scores]
+        QTS[quiz_topic_scores]
+        HSP[hitl_study_plan_offers]
+        HPO[hitl_practice_offers]
+        MC[mcp_calls]
+        MU[mcp_unavailable_events]
+    end
+
+    CE --> RD
+    CRE --> CV
+    PQE --> QS
+    PQE --> QTS
+    PQE --> HSP
+    PSPE --> HPO
+    CIE --> MC
+    CIE --> MU
+    LPFE --> MC
+    LPFE --> MU
+```
+
+---
+
 ## Evaluations & Telemetry
 
 ### Current Observability
@@ -528,6 +772,9 @@ The `StudyPlanGeneratorExecutor` calls `schedule_study_plan()` **directly as Pyt
 | **MCP-first instructions** | Agents instructed to always use MCP, never answer from memory alone |
 | **Auto-approve disclaimer** | When critic loop reaches iteration cap, content is delivered with a transparent disclaimer about verification needs |
 | **Bounded revision loops** | Maximum 2 critic iterations prevents infinite token consumption |
+| **MCP fallback agent** | `CertificationInfoExecutor` uses `cert_info_fallback_agent` (no MCP) with mandatory unavailability disclaimer when MS Learn MCP is down |
+| **Transient error retry** | `safe_agent_run()` with exponential backoff (max 5 attempts) for timeout, rate limit, and network errors |
+| **Question validation** | `validate_questions()` deterministically checks practice questions for structural integrity, topic coverage, and deduplication before delivery |
 
 ### Additional Considerations
 
