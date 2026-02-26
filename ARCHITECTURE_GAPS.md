@@ -42,12 +42,12 @@ Gap analysis comparing the current implementation against the [project requireme
 |-------------|--------|----------|------|
 | **Multi-agent system** aligned with PROJECT.md | ✅ Implemented | 6 agents, 8 executors, WorkflowBuilder graph | — |
 | **Reasoning** and multi-step decision-making | ✅ Implemented | Planner-Executor, Critic/Verifier, Self-reflection, Role-based specialization, Deterministic computation, **Coordinator CoT reasoning field (G7)** | — |
-| **External tools, APIs, MCP** integration | ✅ Implemented | MS Learn MCP, `schedule_study_plan` @ai_function, `score_quiz` Python tool | G3 (LPF fallback), G18 (MCP caching) |
+| **External tools, APIs, MCP** integration | ✅ Implemented | MS Learn MCP, `schedule_study_plan` @ai_function, `score_quiz` Python tool | G18 (MCP caching) |
 | **Demoable** with clear agent interactions | ✅ Implemented | CopilotKit chat UI, workflow progress rendering, quiz cards, offer cards | G14 (accessibility) |
 | **Clear documentation** — agent roles, reasoning flow, tool integrations | ✅ Implemented | ARCHITECTURE.md with Mermaid diagrams, workflow.svg, inline docstrings | — |
 | **Evaluations, telemetry, monitoring** | ⚠️ Partial | OTel tracing, custom metrics (8 instruments), **end-to-end evaluation pipeline (6 custom evaluators, JSONL datasets, CLI orchestrator)**, **Critic calibration evaluation (precision/recall/F1)** | G10 |
 | **Advanced reasoning patterns** (planner-executor, critics, reflection loops) | ✅ Implemented | All four patterns implemented, **Coordinator CoT reasoning (G7)** | — |
-| **Responsible AI** (guardrails, validation, fallbacks) | ✅ Implemented | Critic gate, structured output, deterministic scoring, MCP fallback (CertInfo only), bounded loops, **InputGuardExecutor (regex-based)**, **Output content safety in CriticExecutor** | G3, G11, G12 |
+| **Responsible AI** (guardrails, validation, fallbacks) | ✅ Implemented | Critic gate, structured output, deterministic scoring, MCP fallback (CertInfo + LearningPathFetcher), bounded loops, **InputGuardExecutor (regex-based)**, **Output content safety in CriticExecutor** | G11, G12 |
 
 ---
 
@@ -123,14 +123,23 @@ This uses the same local regex-based approach as G1 (no Azure AI Content Safety 
 | **Effort** | Low (1 day) |
 | **Requirement** | External tool integration, Responsible AI — fallbacks |
 | **Criterion** | Reliability & Safety |
+| **Status** | ✅ **Implemented** |
 
-**Current state:** `CertificationInfoExecutor` has a fallback agent (`cert_info_fallback_agent`) that gracefully degrades when MS Learn MCP is unavailable. `LearningPathFetcherExecutor` does **not** — if MCP is down during a study plan request, the executor emits a generic error message and terminates.
+**Implementation:** `LearningPathFetcherExecutor` now mirrors the `CertificationInfoExecutor` graceful-degradation pattern. When MS Learn MCP is unavailable, it falls back to a no-MCP agent that answers from training knowledge with a prominent disclaimer.
 
-**Gap:** No graceful degradation for the study plan pipeline when MCP is unavailable.
+**What was built:**
+- **`FALLBACK_INSTRUCTIONS`** in `agents/learning_path_fetcher_agent.py` — instructs the fallback agent to produce topic structures from training knowledge with an unavailability disclaimer, while never fabricating URLs
+- **`create_learning_path_fetcher_agent_no_mcp()`** factory — creates a `LearningPathFetcherAgent-Fallback` instance with no MCP tools, identical pattern to `create_cert_info_agent_no_mcp()`
+- **`learning_path_fallback_agent`** parameter added to `LearningPathFetcherExecutor.__init__()` — optional fallback agent, defaults to `None` for backward compatibility
+- **`_fetch_with_fallback()`** helper method — sends the original prompt to the fallback agent with the same `LearningPathFetcherResponse` structured output format
+- **Fallback wired in both handlers** — `handle()` (regular routing) and `handle_quiz_study_plan()` (post-quiz flow) both try the fallback agent on MCP errors before emitting an error message
+- **OTel metrics** — `mcp_unavailable_events` now reports `degraded: "true"` when the fallback agent is used, matching the CertInfo pattern
+- **Workflow wiring** — `build_workflow()` in `workflow.py` creates the fallback agent and passes it to the executor
 
-**Recommended approach:**
-- Create `create_learning_path_fetcher_agent_no_mcp()` in `agents/learning_path_fetcher_agent.py` — similar to `create_cert_info_agent_no_mcp()` — that returns a minimal topic structure from training knowledge with an unavailability disclaimer
-- Wire it as a fallback in `LearningPathFetcherExecutor`, mirroring the CertInfoExecutor pattern
+**Degradation behaviour:**
+- MCP error + fallback agent configured → fallback agent produces topic structure from training knowledge → study plan pipeline continues normally
+- MCP error + no fallback agent → existing generic error message (backward compatible)
+- Fallback agent also fails → generic error message emitted
 
 ---
 
@@ -553,7 +562,7 @@ flowchart LR
 | ID | Gap | Effort | Requirement |
 |----|-----|--------|-------------|
 | ~~G2~~ | ~~Output Content Safety~~ | ~~Medium~~ | ✅ **Implemented** |
-| G3 | MCP Fallback for LearningPathFetcher | Low | Responsible AI |
+| ~~G3~~ | ~~MCP Fallback for LearningPathFetcher~~ | ~~Low~~ | ✅ **Implemented** |
 | G4 | Cross-Route Cycle Breaker | Low | Reliability |
 | ~~G5~~ | ~~End-to-End Evaluations~~ | ~~High~~ | ✅ **Implemented** |
 
@@ -590,11 +599,11 @@ flowchart LR
 |-------------|------------|------|
 | Multi-agent system | ✅ 6 agents, 8 executors, graph workflow | — |
 | Reasoning & multi-step thinking | ✅ 5 reasoning patterns, **Coordinator CoT (G7)** | — |
-| External tools, APIs, MCP | ✅ MS Learn MCP, schedule tool, score tool | G3, G18, G20 |
+| External tools, APIs, MCP | ✅ MS Learn MCP, schedule tool, score tool | G18, G20 |
 | Demoable experience | ✅ CopilotKit chat, HITL cards, progress | G14, G17 |
 | Clear documentation | ✅ ARCHITECTURE.md, workflow.svg, docstrings | — |
 | Evaluations & telemetry | ⚠️ OTel tracing + 8 custom metrics (implemented), **E2E evaluation pipeline (6 evaluators, JSONL datasets, CLI)**, **Critic calibration (precision/recall/F1)** | G10 |
-| Responsible AI | ✅ Critic gate, structured output, deterministic scoring, MCP fallback (CertInfo only), bounded loops, **InputGuardExecutor**, **Output content safety gate** | G3, G4, G11, G12, G19, G20 |
+| Responsible AI | ✅ Critic gate, structured output, deterministic scoring, MCP fallback (CertInfo + LearningPathFetcher), bounded loops, **InputGuardExecutor**, **Output content safety gate** | G4, G11, G12, G19, G20 |
 | Planner-Executor | ✅ Coordinator → specialists | — |
 | Critic / Verifier | ✅ CriticExecutor with structured verdict + **output content safety gate** + **calibration evaluation** | — |
 | Self-reflection & Iteration | ✅ Revision loop with feedback | — |

@@ -14,7 +14,7 @@ Graph position::
 """
 
 import logging
-from typing import Any
+from typing import Any, Optional
 
 from agent_framework import (
     ChatAgent,
@@ -85,10 +85,12 @@ class LearningPathFetcherExecutor(Executor):
     """
 
     learning_path_agent: ChatAgent
+    learning_path_fallback_agent: Optional[ChatAgent]
 
     def __init__(
         self,
         learning_path_agent: ChatAgent,
+        learning_path_fallback_agent: Optional[ChatAgent] = None,
         id: str = "learning-path-fetcher-executor",
     ):
         """
@@ -96,9 +98,13 @@ class LearningPathFetcherExecutor(Executor):
 
         Parameters:
             learning_path_agent (ChatAgent): Agent with MS Learn MCP access.
+            learning_path_fallback_agent (Optional[ChatAgent]): Agent without
+                MCP used when ``learn.microsoft.com/api/mcp`` is down.
+                When ``None``, MCP failures emit a generic error message.
             id (str): Executor identifier in the workflow graph.
         """
         self.learning_path_agent = learning_path_agent
+        self.learning_path_fallback_agent = learning_path_fallback_agent
         super().__init__(id=id)
 
     @handler
@@ -149,7 +155,35 @@ class LearningPathFetcherExecutor(Executor):
                 1,
                 {"executor": "learning-path-fetcher", "status": "error"},
             )
-            if is_mcp_error(exc):
+            if is_mcp_error(exc) and self.learning_path_fallback_agent is not None:
+                metrics.mcp_unavailable_events.add(
+                    1,
+                    {
+                        "executor": "learning-path-fetcher",
+                        "degraded": "true",
+                    },
+                )
+                logger.warning(
+                    "LearningPathFetcher MCP unavailable; degrading to "
+                    "general knowledge: %s",
+                    exc,
+                )
+                try:
+                    response = await self._fetch_with_fallback(prompt)
+                except Exception as fallback_exc:
+                    logger.error(
+                        "LearningPathFetcher fallback agent failed: %s",
+                        fallback_exc,
+                        exc_info=True,
+                    )
+                    await emit_response(
+                        ctx,
+                        self.id,
+                        "I encountered an issue retrieving that "
+                        "information. Please try again.",
+                    )
+                    return
+            elif is_mcp_error(exc):
                 metrics.mcp_unavailable_events.add(
                     1,
                     {
@@ -163,6 +197,7 @@ class LearningPathFetcherExecutor(Executor):
                     exc,
                 )
                 await emit_response(ctx, self.id, _mcp_unavailable_msg(cert))
+                return
             else:
                 logger.error(
                     "LearningPathFetcher agent call failed for %s: %s",
@@ -176,7 +211,7 @@ class LearningPathFetcherExecutor(Executor):
                     "I encountered an issue retrieving that information. "
                     "Please try again.",
                 )
-            return
+                return
 
         topics = self._extract_topics(response, cert)
 
@@ -252,7 +287,36 @@ class LearningPathFetcherExecutor(Executor):
                 1,
                 {"executor": "learning-path-fetcher", "status": "error"},
             )
-            if is_mcp_error(exc):
+            if is_mcp_error(exc) and self.learning_path_fallback_agent is not None:
+                metrics.mcp_unavailable_events.add(
+                    1,
+                    {
+                        "executor": "learning-path-fetcher",
+                        "degraded": "true",
+                    },
+                )
+                logger.warning(
+                    "LearningPathFetcher MCP unavailable for post-quiz plan; "
+                    "degrading to general knowledge: %s",
+                    exc,
+                )
+                try:
+                    response = await self._fetch_with_fallback(prompt)
+                except Exception as fallback_exc:
+                    logger.error(
+                        "LearningPathFetcher fallback agent failed for "
+                        "post-quiz plan: %s",
+                        fallback_exc,
+                        exc_info=True,
+                    )
+                    await emit_response(
+                        ctx,
+                        self.id,
+                        "I encountered an issue retrieving that "
+                        "information. Please try again.",
+                    )
+                    return
+            elif is_mcp_error(exc):
                 metrics.mcp_unavailable_events.add(
                     1,
                     {
@@ -266,6 +330,7 @@ class LearningPathFetcherExecutor(Executor):
                     exc,
                 )
                 await emit_response(ctx, self.id, _mcp_unavailable_msg(cert))
+                return
             else:
                 logger.error(
                     "LearningPathFetcher agent call failed for post-quiz plan (%s): %s",
@@ -279,7 +344,7 @@ class LearningPathFetcherExecutor(Executor):
                     "I encountered an issue retrieving that information. "
                     "Please try again.",
                 )
-            return
+                return
 
         topics = self._extract_topics(response, cert)
 
@@ -299,6 +364,27 @@ class LearningPathFetcherExecutor(Executor):
     # ------------------------------------------------------------------
     # Internal helpers
     # ------------------------------------------------------------------
+
+    async def _fetch_with_fallback(self, prompt: str) -> Any:
+        """
+        Fetch learning paths using the fallback agent (no MCP).
+
+        Called when the primary MCP-equipped agent fails due to MCP
+        unavailability and a fallback agent is configured.
+
+        Parameters:
+            prompt (str): The original prompt to send to the fallback agent.
+
+        Returns:
+            Any: Agent response with structured learning path data.
+        """
+        messages = [ChatMessage(role=Role.USER, text=prompt)]
+        response = await safe_agent_run(
+            self.learning_path_fallback_agent,
+            messages,
+            response_format=LearningPathFetcherResponse,
+        )
+        return response
 
     @staticmethod
     def _extract_topics(response: Any, cert: str) -> list[dict]:

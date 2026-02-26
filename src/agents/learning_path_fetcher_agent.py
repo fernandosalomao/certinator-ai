@@ -138,6 +138,44 @@ Return data that matches the configured structured response schema.
 """
 
 
+FALLBACK_INSTRUCTIONS: str = """\
+You fetch Microsoft certification exam objectives and their official \
+Microsoft Learn learning paths.
+
+Microsoft Learn is currently unavailable. You MUST answer from your \
+training knowledge about Microsoft certifications, but you MUST clearly \
+disclose this limitation.
+
+## MANDATORY disclaimer — include verbatim at the start of every response
+\u26a0\ufe0f **Microsoft Learn is temporarily unavailable.** The topic \
+structure and learning paths below are based on general training \
+knowledge and may not reflect the latest official details. Please \
+verify at https://learn.microsoft.com when the service is restored.
+
+## Your Task
+When given a certification exam code, produce the best topic structure \
+you can from your training knowledge:
+
+1. List all known skill/topic areas with approximate percentage weights.
+2. For each topic, provide any Microsoft Learn learning path URLs you \
+   are confident about, with estimated durations.
+3. If you are NOT confident about a URL, omit it entirely — never \
+   fabricate URLs.
+
+## Output Contract
+Return data that matches the configured structured response schema.
+
+## Rules
+- duration_hours MUST be a number, never a string.
+- If a range is given (e.g. "15\u201320%"), use the midpoint (17.5).
+- Weights across all topics should sum to approximately 100.
+- If duration is unknown for a path, default to 2.0 hours.
+- Only include URLs starting with https://learn.microsoft.com.
+- Do not add extra keys outside the schema.
+- For uncertain values, use reasonable estimates and note uncertainty.
+"""
+
+
 def create_learning_path_fetcher_agent(
     mcp_tool: MCPStreamableHTTPTool,
     project_endpoint: str | None = None,
@@ -153,4 +191,35 @@ def create_learning_path_fetcher_agent(
         name="LearningPathFetcherAgent",
         instructions=INSTRUCTIONS + SAFETY_SYSTEM_PROMPT,
         tools=[mcp_tool],
+    )
+
+
+def create_learning_path_fetcher_agent_no_mcp(
+    project_endpoint: str | None = None,
+    credential: Any | None = None,
+):
+    """
+    Create a learning path fetcher agent without the MS Learn MCP tool.
+
+    Used as a graceful-degradation fallback when
+    ``learn.microsoft.com/api/mcp`` is unavailable.  The agent answers
+    from training knowledge and is instructed to prepend a prominent
+    unavailability disclaimer to every response.
+
+    Parameters:
+        project_endpoint (str | None): Azure AI Foundry project endpoint.
+        credential (Any | None): Azure credential for authentication.
+
+    Returns:
+        ChatAgent: Configured fallback agent instance.
+    """
+    client = get_ai_client(
+        model_deployment_name=LLM_MODEL_LEARNING_PATH_FETCHER,
+        project_endpoint=project_endpoint,
+        credential=credential,
+    )
+    return client.create_agent(
+        name="LearningPathFetcherAgent-Fallback",
+        instructions=FALLBACK_INSTRUCTIONS + SAFETY_SYSTEM_PROMPT,
+        tools=[],
     )

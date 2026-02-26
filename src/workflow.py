@@ -59,6 +59,7 @@ from agents import (
     create_coordinator_agent,
     create_critic_agent,
     create_learning_path_fetcher_agent,
+    create_learning_path_fetcher_agent_no_mcp,
     create_practice_agent,
     create_study_plan_agent,
 )
@@ -284,6 +285,12 @@ async def build_workflow():
         credential=credential,
     )
 
+    # Fallback agent: no MCP — used when learn.microsoft.com/api/mcp is down
+    learning_path_fallback_agent = create_learning_path_fetcher_agent_no_mcp(
+        project_endpoint=project_endpoint,
+        credential=credential,
+    )
+
     # StudyPlanGeneratorAgent: uses math tool only — NO MCP (data comes from fetcher)
     study_plan_agent = create_study_plan_agent(
         schedule_study_plan_tool=schedule_study_plan,
@@ -311,6 +318,7 @@ async def build_workflow():
     )
     learning_path_fetcher_executor = LearningPathFetcherExecutor(
         learning_path_agent=learning_path_agent,
+        learning_path_fallback_agent=learning_path_fallback_agent,
     )
     study_plan_generator_executor = StudyPlanGeneratorExecutor(
         study_plan_agent=study_plan_agent,
