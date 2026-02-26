@@ -7,7 +7,10 @@ that validates output and can loop back for revision.
 
 Graph topology::
 
-    CoordinatorExecutor (start)
+    InputGuardExecutor (start)
+        │  (regex safety gate — blocks injections / harmful content)
+        ▼
+    CoordinatorExecutor
         │
         └── switch-case on RoutingDecision.route:
               ├── "certification-info"  → CertificationInfoExecutor  ──► CriticExecutor
@@ -67,6 +70,7 @@ from config import (
 from executors.certification_info_executor import CertificationInfoExecutor
 from executors.coordinator_executor import CoordinatorExecutor
 from executors.critic_executor import CriticExecutor
+from executors.input_guard_executor import InputGuardExecutor
 from executors.learning_path_fetcher_executor import LearningPathFetcherExecutor
 from executors.models import (
     ApprovedStudyPlanOutput,
@@ -298,6 +302,7 @@ async def build_workflow():
     )
 
     # ── Instantiate executors ─────────────────────────────────────────
+    input_guard_executor = InputGuardExecutor()
     coordinator_executor = CoordinatorExecutor(coordinator_agent)
 
     certification_info_executor = CertificationInfoExecutor(
@@ -322,7 +327,8 @@ async def build_workflow():
     # ── Build the workflow graph ──────────────────────────────────────
     workflow = (
         WorkflowBuilder()
-        .set_start_executor(coordinator_executor)
+        .set_start_executor(input_guard_executor)
+        .add_edge(input_guard_executor, coordinator_executor)
         .add_switch_case_edge_group(
             coordinator_executor,
             [

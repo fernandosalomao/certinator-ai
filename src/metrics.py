@@ -129,3 +129,17 @@ mcp_unavailable_events = _meter.create_counter(
     ),
     unit="1",
 )
+
+# ---------------------------------------------------------------------------
+# Safety — input guard blocks
+# ---------------------------------------------------------------------------
+
+safety_blocks = _meter.create_counter(
+    name="certinator.safety.blocks",
+    description=(
+        "User messages blocked by the InputGuardExecutor. "
+        "Attributes: reason (prompt_injection/content_safety/"
+        "exam_policy), category."
+    ),
+    unit="1",
+)

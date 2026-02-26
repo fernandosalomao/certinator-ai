@@ -10,6 +10,7 @@ from agent_framework import MCPStreamableHTTPTool
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from config import LLM_MODEL_LEARNING_PATH_FETCHER, get_ai_client
+from safety import SAFETY_SYSTEM_PROMPT
 
 # INSTRUCTIONS: str = """\
 # You are the Learning Path Fetcher for Certinator AI. Your job is to \
@@ -150,6 +151,6 @@ def create_learning_path_fetcher_agent(
     )
     return client.create_agent(
         name="LearningPathFetcherAgent",
-        instructions=INSTRUCTIONS,
+        instructions=INSTRUCTIONS + SAFETY_SYSTEM_PROMPT,
         tools=[mcp_tool],
     )

@@ -8,6 +8,7 @@ from typing import Any
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from config import LLM_MODEL_STUDY_PLAN_GENERATOR, get_ai_client
+from safety import SAFETY_SYSTEM_PROMPT
 
 # INSTRUCTIONS: str = """\
 # You are the Study Plan specialist for Certinator AI. \
@@ -172,6 +173,6 @@ def create_study_plan_agent(
     )
     return client.create_agent(
         name="StudyPlanGeneratorAgent",
-        instructions=INSTRUCTIONS,
+        instructions=INSTRUCTIONS + SAFETY_SYSTEM_PROMPT,
         tools=[schedule_study_plan_tool],
     )

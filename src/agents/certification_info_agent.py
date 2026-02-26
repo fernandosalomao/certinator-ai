@@ -10,6 +10,7 @@ from agent_framework import MCPStreamableHTTPTool
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from config import LLM_MODEL_CERTIFICATION_INFO, get_ai_client
+from safety import SAFETY_SYSTEM_PROMPT
 
 # INSTRUCTIONS: str = """\
 # You are the Certification Information specialist for Certinator AI. \
@@ -157,7 +158,7 @@ def create_cert_info_agent(
     )
     return client.create_agent(
         name="CertificationInfoAgent",
-        instructions=INSTRUCTIONS,
+        instructions=INSTRUCTIONS + SAFETY_SYSTEM_PROMPT,
         tools=[mcp_tool],
     )
 
@@ -188,6 +189,6 @@ def create_cert_info_agent_no_mcp(
     )
     return client.create_agent(
         name="CertificationInfoAgent-Fallback",
-        instructions=FALLBACK_INSTRUCTIONS,
+        instructions=FALLBACK_INSTRUCTIONS + SAFETY_SYSTEM_PROMPT,
         tools=[],
     )

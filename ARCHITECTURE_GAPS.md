@@ -47,7 +47,7 @@ Gap analysis comparing the current implementation against the [project requireme
 | **Clear documentation** — agent roles, reasoning flow, tool integrations | ✅ Implemented | ARCHITECTURE.md with Mermaid diagrams, workflow.svg, inline docstrings | — |
 | **Evaluations, telemetry, monitoring** | ⚠️ Partial | OTel tracing, custom metrics (8 instruments), evaluation strategy documented but not implemented | G5, G6, G10 |
 | **Advanced reasoning patterns** (planner-executor, critics, reflection loops) | ✅ Implemented | All four patterns implemented | G7 (CoT for routing) |
-| **Responsible AI** (guardrails, validation, fallbacks) | ⚠️ Partial | Critic gate, structured output, deterministic scoring, MCP fallback (CertInfo only), bounded loops | G1, G2, G3, G11, G12 |
+| **Responsible AI** (guardrails, validation, fallbacks) | ✅ Implemented | Critic gate, structured output, deterministic scoring, MCP fallback (CertInfo only), bounded loops, **InputGuardExecutor (regex-based)** | G2, G3, G11, G12 |
 
 ---
 
@@ -59,7 +59,7 @@ Gap analysis comparing the current implementation against the [project requireme
 | **Reasoning & Multi-step Thinking** | Strong | 5 reasoning patterns, typed message graph, conditional routing, revision loops | G7 (CoT audit trail for Coordinator) |
 | **Creativity & Originality** | Strong | Cross-route bidirectional flows (Practice ↔ StudyPlan), deterministic math offloading, dual-mode Practice agent, MCP fallback with disclaimer | — |
 | **User Experience & Presentation** | Good | CopilotKit v2 HITL, inline workflow progress, quiz session UI, offer cards | G13 (dynamic suggestions), G14 (accessibility), G17 (streaming) |
-| **Reliability & Safety** | Good | Bounded loops, transient error retry, question validation, structured output | G1, G2, G4, G12, G15 |
+| **Reliability & Safety** | Good | Bounded loops, transient error retry, question validation, structured output, **InputGuardExecutor (prompt injection + content safety + exam policy)** | G2, G4, G12, G15 |
 
 ---
 
@@ -524,7 +524,7 @@ flowchart LR
 
 | ID | Gap | Effort | Requirement |
 |----|-----|--------|-------------|
-| G1 | Input Guard (Prompt Shields) | Medium | Responsible AI |
+| ~~G1~~ | ~~Input Guard (Prompt Shields)~~ | ~~Medium~~ | ✅ **Implemented** |
 
 ### P1 — High (Should Fix)
 
@@ -572,7 +572,7 @@ flowchart LR
 | Demoable experience | ✅ CopilotKit chat, HITL cards, progress | G14, G17 |
 | Clear documentation | ✅ ARCHITECTURE.md, workflow.svg, docstrings | — |
 | Evaluations & telemetry | ⚠️ OTel tracing + 8 custom metrics (implemented), evaluation harness (documented only) | G5, G6, G10 |
-| Responsible AI | ⚠️ Critic gate, structured output, deterministic scoring, MCP fallback (CertInfo only), bounded loops | G1, G2, G3, G4, G11, G12, G19, G20 |
+| Responsible AI | ✅ Critic gate, structured output, deterministic scoring, MCP fallback (CertInfo only), bounded loops, **InputGuardExecutor** | G2, G3, G4, G11, G12, G19, G20 |
 | Planner-Executor | ✅ Coordinator → specialists | — |
 | Critic / Verifier | ✅ CriticExecutor with structured verdict | G2, G6 |
 | Self-reflection & Iteration | ✅ Revision loop with feedback | — |

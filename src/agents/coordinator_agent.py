@@ -8,6 +8,7 @@ from typing import Any
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from config import LLM_MODEL_COORDINATOR, get_ai_client
+from safety import SAFETY_SYSTEM_PROMPT
 
 # INSTRUCTIONS: str = """\
 # You are the Coordinator agent for Certinator AI, a multi-agent system \
@@ -165,5 +166,5 @@ def create_coordinator_agent(
     )
     return client.create_agent(
         name="CoordinatorAgent",
-        instructions=INSTRUCTIONS,
+        instructions=INSTRUCTIONS + SAFETY_SYSTEM_PROMPT,
     )

@@ -8,6 +8,7 @@ from typing import Any
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from config import LLM_MODEL_CRITIC, get_ai_client
+from safety import SAFETY_SYSTEM_PROMPT
 
 INSTRUCTIONS: str = """\
 You are the Critic agent for Certinator AI. You receive specialist-generated \
@@ -118,5 +119,5 @@ def create_critic_agent(
     )
     return client.create_agent(
         name="CriticAgent",
-        instructions=INSTRUCTIONS,
+        instructions=INSTRUCTIONS + SAFETY_SYSTEM_PROMPT,
     )
