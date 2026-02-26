@@ -17,7 +17,7 @@ Architecture:
     2. SDK built-in evaluators (require Azure OpenAI endpoint):
        - RelevanceEvaluator → cert_info_golden.jsonl
        - CoherenceEvaluator → cert_info_golden.jsonl
-       - GroundednessEvaluator → cert_info_golden.jsonl
+       - GroundednessEvaluator (SDK) → groundedness.jsonl
 
     3. Inline evaluation helper (evaluate_single_response)
 
@@ -52,6 +52,7 @@ from evaluations.evaluators import (
     ContentSafetyEvaluator,
     CriticCalibrationEvaluator,
     ExamContentAccuracyEvaluator,
+    GroundednessEvaluator,
     QuizQualityEvaluator,
     RoutingAccuracyEvaluator,
     StudyPlanFeasibilityEvaluator,
@@ -63,6 +64,7 @@ _study_plan_evaluator = StudyPlanFeasibilityEvaluator()
 _quiz_quality_evaluator = QuizQualityEvaluator()
 _content_safety_evaluator = ContentSafetyEvaluator()
 _critic_calibration_evaluator = CriticCalibrationEvaluator()
+_groundedness_evaluator = GroundednessEvaluator()
 
 
 # ─── Helpers ─────────────────────────────────────────────────────────────
@@ -355,6 +357,14 @@ def run_evaluation(
         # 7. Critic calibration (G6)
         all_results["critic_calibration"] = _run_critic_calibration_suite()
 
+        # 8. Groundedness (G10)
+        all_results["groundedness"] = _run_custom_suite(
+            dataset_name="groundedness",
+            evaluator=_groundedness_evaluator,
+            data_path=DATASETS_DIR / "groundedness.jsonl",
+            evaluator_name="GroundednessEvaluator",
+        )
+
         logger.info(
             "Evaluation: Custom suites complete. %d suites run.",
             len(all_results),
@@ -415,6 +425,57 @@ def run_evaluation(
                     logger.warning(
                         "Evaluation: cert_info_golden.jsonl "
                         "not found. Skipping SDK evaluators."
+                    )
+
+                # ── SDK Groundedness evaluator (G10) ─────────────
+                groundedness_path = DATASETS_DIR / "groundedness.jsonl"
+                if groundedness_path.exists():
+                    try:
+                        from azure.ai.evaluation import (
+                            GroundednessEvaluator as SDKGroundednessEvaluator,
+                        )
+
+                        sdk_groundedness_eval = SDKGroundednessEvaluator(
+                            model_config=model_config,
+                        )
+                        sdk_g_evaluators = {
+                            "groundedness": sdk_groundedness_eval,
+                        }
+                        sdk_g_config = {
+                            "groundedness": {
+                                "column_mapping": {
+                                    "query": "${data.query}",
+                                    "response": "${data.response}",
+                                    "context": "${data.context}",
+                                }
+                            }
+                        }
+
+                        logger.info("Evaluation: Running SDK GroundednessEvaluator...")
+
+                        sdk_g_output = str(
+                            RESULTS_DIR / f"sdk_groundedness_{timestamp}"
+                        )
+                        sdk_g_result = evaluate(
+                            data=str(groundedness_path),
+                            evaluators=sdk_g_evaluators,
+                            evaluator_config=sdk_g_config,
+                            output_path=sdk_g_output,
+                        )
+                        all_results["sdk_groundedness"] = sdk_g_result
+                        logger.info(
+                            "Evaluation: SDK groundedness results saved to %s",
+                            sdk_g_output,
+                        )
+                    except (ImportError, Exception) as g_exc:
+                        logger.warning(
+                            "Evaluation: SDK GroundednessEvaluator unavailable: %s",
+                            g_exc,
+                        )
+                else:
+                    logger.warning(
+                        "Evaluation: groundedness.jsonl not found. "
+                        "Skipping SDK groundedness evaluator."
                     )
 
             except ImportError as exc:

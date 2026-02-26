@@ -15,6 +15,7 @@ from evaluations.evaluators import (
     ContentSafetyEvaluator,
     CriticCalibrationEvaluator,
     ExamContentAccuracyEvaluator,
+    GroundednessEvaluator,
     QuizQualityEvaluator,
     RoutingAccuracyEvaluator,
     StudyPlanFeasibilityEvaluator,
@@ -638,3 +639,173 @@ class TestEvaluateSingleResponse:
             response="Here are the brain dumps for AZ-104.",
         )
         assert safe["overall_score"] > unsafe["overall_score"]
+
+
+# =====================================================================
+# GroundednessEvaluator
+# =====================================================================
+
+
+class TestGroundednessEvaluator:
+    """Tests for the groundedness evaluator."""
+
+    def test_fully_grounded_scores_high(self):
+        """Response that echoes all context signals should score 4-5."""
+        evaluator = GroundednessEvaluator()
+        context = (
+            "## AZ-104: Microsoft Azure Administrator\n\n"
+            "### Skills Measured\n"
+            "- Manage Azure identities and governance (20-25%)\n"
+            "- Implement and manage storage (15-20%)\n"
+            "### Exam Details\n"
+            "- Duration: 120 minutes\n"
+            "- Passing score: 700\n"
+            "### Resources\n"
+            "https://learn.microsoft.com/en-us/training/paths/"
+            "az-104-administrator/\n"
+        )
+        response = (
+            "## AZ-104: Microsoft Azure Administrator\n\n"
+            "### Skills Measured\n"
+            "- Manage Azure identities and governance (20-25%)\n"
+            "- Implement and manage storage (15-20%)\n"
+            "### Exam Details\n"
+            "- Duration: 120 minutes\n"
+            "- Passing score: 700\n"
+            "### Resources\n"
+            "https://learn.microsoft.com/en-us/training/paths/"
+            "az-104-administrator/\n"
+        )
+        result = evaluator(response=response, context=context)
+        assert result["groundedness_score"] >= 4
+        assert result["groundedness_ratio"] is not None
+        assert result["groundedness_ratio"] >= 0.6
+
+    def test_ungrounded_scores_low(self):
+        """Response with no overlap to context should score 1-2."""
+        evaluator = GroundednessEvaluator()
+        context = (
+            "## AZ-104: Microsoft Azure Administrator\n\n"
+            "### Skills Measured\n"
+            "- Manage Azure identities and governance (20-25%)\n"
+            "- Passing score: 700\n"
+            "https://learn.microsoft.com/en-us/certifications/"
+            "azure-administrator/\n"
+        )
+        response = (
+            "This certification is really cool. You should "
+            "definitely study hard and use YouTube and Udemy. "
+            "I think you can pass it in about 2 weeks. "
+            "The exam was created in 2020. Good luck!"
+        )
+        result = evaluator(response=response, context=context)
+        assert result["groundedness_score"] <= 2
+        assert result["groundedness_ratio"] is not None
+        assert result["groundedness_ratio"] < 0.40
+
+    def test_no_context_returns_score_3(self):
+        """When no context is provided, score should be 3."""
+        evaluator = GroundednessEvaluator()
+        result = evaluator(
+            response="AZ-104 is about Azure administration.",
+            context="",
+        )
+        assert result["groundedness_score"] == 3
+        assert result["groundedness_ratio"] is None
+        assert "cannot be assessed" in result["groundedness_reason"]
+
+    def test_empty_response_scores_1(self):
+        """An empty response is never grounded."""
+        evaluator = GroundednessEvaluator()
+        result = evaluator(
+            response="",
+            context="AZ-104 covers Azure administration.",
+        )
+        assert result["groundedness_score"] == 1
+        assert result["groundedness_ratio"] == 0.0
+
+    def test_url_overlap_detected(self):
+        """URLs from context should be detected in response."""
+        evaluator = GroundednessEvaluator()
+        url = "https://learn.microsoft.com/en-us/training/paths/az-104/"
+        context = f"Study here: {url}"
+        response = f"Please visit {url} for training materials."
+        result = evaluator(response=response, context=context)
+        assert url.lower() in [s.lower() for s in result["groundedness_signals_found"]]
+
+    def test_percentage_overlap_detected(self):
+        """Percentage facts from context should be matched."""
+        evaluator = GroundednessEvaluator()
+        context = "Manage Azure identities and governance (20-25%)"
+        response = "Skills include governance at 20-25% weight."
+        result = evaluator(response=response, context=context)
+        # The percentage "20-25%" should appear in found signals
+        found_lower = [s.lower() for s in result["groundedness_signals_found"]]
+        assert any("20-25%" in s for s in found_lower)
+
+    def test_entity_overlap_detected(self):
+        """Certification codes should be matched."""
+        evaluator = GroundednessEvaluator()
+        context = "AZ-104 is a prerequisite for AZ-305."
+        response = "You should pass AZ-104 before taking AZ-305."
+        result = evaluator(response=response, context=context)
+        found_lower = [s.lower() for s in result["groundedness_signals_found"]]
+        assert "az-104" in found_lower
+        assert "az-305" in found_lower
+
+    def test_partial_grounding_mid_score(self):
+        """Partial overlap should yield mid-range score (2-4)."""
+        evaluator = GroundednessEvaluator()
+        context = (
+            "## AZ-104: Microsoft Azure Administrator\n\n"
+            "### Skills Measured\n"
+            "- Manage Azure identities and governance (20-25%)\n"
+            "- Implement and manage storage (15-20%)\n"
+            "- Deploy and manage compute resources (20-25%)\n"
+            "### Exam Details\n"
+            "- Duration: 120 minutes\n"
+            "- Passing score: 700\n"
+            "https://learn.microsoft.com/en-us/training/paths/"
+            "az-104-administrator/\n"
+        )
+        response = (
+            "AZ-104 covers Azure administration. "
+            "Skills include governance (20-25%) and storage. "
+            "The exam lasts 120 minutes."
+        )
+        result = evaluator(response=response, context=context)
+        assert 2 <= result["groundedness_score"] <= 4
+
+    def test_no_extractable_signals_returns_3(self):
+        """Context with no extractable signals yields score 3."""
+        evaluator = GroundednessEvaluator()
+        result = evaluator(
+            response="Some response text.",
+            context="just some random words here",
+        )
+        assert result["groundedness_score"] == 3
+        assert "cannot be assessed" in result["groundedness_reason"]
+
+    def test_result_keys_present(self):
+        """All expected keys should be present in the result."""
+        evaluator = GroundednessEvaluator()
+        result = evaluator(
+            response="AZ-104 is great.",
+            context="AZ-104 certification details.",
+        )
+        assert "groundedness_score" in result
+        assert "groundedness_ratio" in result
+        assert "groundedness_signals_found" in result
+        assert "groundedness_signals_missing" in result
+        assert "groundedness_reason" in result
+
+    def test_score_range_valid(self):
+        """Score should always be 1-5."""
+        evaluator = GroundednessEvaluator()
+        for ctx, resp in [
+            ("AZ-104 (20-25%)", "AZ-104 (20-25%)"),
+            ("AZ-104 (20-25%)", "Nothing related at all"),
+            ("", "Something"),
+        ]:
+            result = evaluator(response=resp, context=ctx)
+            assert 1 <= result["groundedness_score"] <= 5

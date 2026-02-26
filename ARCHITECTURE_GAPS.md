@@ -45,7 +45,7 @@ Gap analysis comparing the current implementation against the [project requireme
 | **External tools, APIs, MCP** integration | ✅ Implemented | MS Learn MCP, `schedule_study_plan` @ai_function, `score_quiz` Python tool | G18 (MCP caching) |
 | **Demoable** with clear agent interactions | ✅ Implemented | CopilotKit chat UI, workflow progress rendering, quiz cards, offer cards | G14 (accessibility) |
 | **Clear documentation** — agent roles, reasoning flow, tool integrations | ✅ Implemented | ARCHITECTURE.md with Mermaid diagrams, workflow.svg, inline docstrings | — |
-| **Evaluations, telemetry, monitoring** | ⚠️ Partial | OTel tracing, custom metrics (8 instruments), **end-to-end evaluation pipeline (6 custom evaluators, JSONL datasets, CLI orchestrator)**, **Critic calibration evaluation (precision/recall/F1)** | G10 |
+| **Evaluations, telemetry, monitoring** | ✅ Implemented | OTel tracing, custom metrics (8 instruments), **end-to-end evaluation pipeline (7 custom evaluators, JSONL datasets, CLI orchestrator)**, **Critic calibration evaluation (precision/recall/F1)**, **Groundedness evaluation (G10)** | — |
 | **Advanced reasoning patterns** (planner-executor, critics, reflection loops) | ✅ Implemented | All four patterns implemented, **Coordinator CoT reasoning (G7)** | — |
 | **Responsible AI** (guardrails, validation, fallbacks) | ✅ Implemented | Critic gate, structured output, deterministic scoring, MCP fallback (CertInfo + LearningPathFetcher), bounded loops, **InputGuardExecutor (regex-based)**, **Output content safety in CriticExecutor** | G11, G12 |
 
@@ -55,7 +55,7 @@ Gap analysis comparing the current implementation against the [project requireme
 
 | Criterion | Score | Strengths | Gaps |
 |-----------|-------|-----------|------|
-| **Accuracy & Relevance** | Strong | MCP-grounded retrieval, structured output, critic validation, deterministic scoring, **Critic calibration evaluation (G6)** | G10 (Groundedness evaluation) |
+| **Accuracy & Relevance** | Strong | MCP-grounded retrieval, structured output, critic validation, deterministic scoring, **Critic calibration evaluation (G6)**, **Groundedness evaluation (G10)** | — |
 | **Reasoning & Multi-step Thinking** | Strong | 5 reasoning patterns, typed message graph, conditional routing, revision loops, **Coordinator CoT audit trail (G7)** | — |
 | **Creativity & Originality** | Strong | Cross-route bidirectional flows (Practice ↔ StudyPlan), deterministic math offloading, dual-mode Practice agent, MCP fallback with disclaimer | — |
 | **User Experience & Presentation** | Good | CopilotKit v2 HITL, inline workflow progress, quiz session UI, offer cards | G13 (dynamic suggestions), G14 (accessibility), G17 (streaming) |
@@ -366,15 +366,35 @@ readinessProbe:
 | **Effort** | Medium (2-3 days) |
 | **Requirement** | Evaluations, Responsible AI |
 | **Criterion** | Accuracy & Relevance |
+| **Status** | ✅ **Implemented** |
 
-**Current state:** CertInfo and LearningPathFetcher agents are instructed to use MCP results, but there is no verification that the final output is actually grounded in those results.
+**Implementation:** Dual-layer groundedness evaluation — a deterministic custom evaluator (always available, no LLM needed) plus the Azure AI Evaluation SDK `GroundednessEvaluator` (LLM-based, when Azure OpenAI is configured).
 
-**Gap:** No automated check that specialist outputs are grounded in MCP search results rather than hallucinated.
+**What was built:**
+- **`GroundednessEvaluator`** custom evaluator (`evaluations/evaluators/groundedness.py`) — deterministic evaluator that measures factual overlap between MCP grounding context and agent response using four signal types:
+  - **URL overlap** — Microsoft Learn URLs present in context that appear in the response
+  - **Percentage/number overlap** — numeric facts (exam weights, durations, passing scores)
+  - **Key phrase overlap** — multi-word noun phrases from headings and bold text
+  - **Named entity overlap** — certification codes (AZ-104, AI-900), Azure service names, Microsoft product names
+- **Scoring** (1–5 scale): 5 = ≥80% signals overlap, 4 = 60–79%, 3 = 40–59%, 2 = 20–39%, 1 = <20%. Returns score 3 when no context is provided (groundedness cannot be assessed).
+- **Groundedness dataset** (`evaluations/datasets/groundedness.jsonl`) — 10 records with `query`, `response`, and `context` (simulated MCP search results), covering:
+  - 6 well-grounded responses (high overlap with MCP context)
+  - 2 partially grounded responses (some hallucinated content mixed in)
+  - 2 poorly grounded responses (vague/hallucinated despite rich context)
+- **Wired into evaluation orchestrator** — runs as custom suite #8 in `run_evaluation()`
+- **SDK `GroundednessEvaluator`** — also wired in the built-in evaluators section; uses Azure AI Evaluation SDK's LLM-based groundedness check for deeper semantic evaluation when Azure OpenAI is configured
+- **11 unit tests** in `tests/test_evaluation.py` — covering fully grounded, ungrounded, no context, empty response, URL overlap, percentage overlap, entity overlap, partial grounding, no extractable signals, result keys, and score range validation
 
-**Recommended approach:**
-- Use `GroundednessEvaluator` from the Azure AI Evaluation SDK
-- Inject MCP tool call results as grounding documents and specialist output as response
-- Run as an offline evaluation first (CI/CD), with potential to add as a gate in `CriticExecutor` for high-stakes responses
+**How it works:**
+1. Extract signals from the grounding context (MCP search results)
+2. Check how many of those signals appear in the agent response
+3. Compute overlap ratio and map to a 1–5 score
+4. Return detailed breakdown of found/missing signals
+
+**How to use:**
+- Run `make eval` or `python -m evaluations --run` to include groundedness in the full evaluation pipeline
+- The custom evaluator runs without LLM dependency (CI/CD safe)
+- The SDK evaluator provides deeper semantic analysis when Azure OpenAI is available
 
 ---
 
@@ -620,7 +640,7 @@ readinessProbe:
 | ~~G7~~ | ~~Coordinator CoT Reasoning Field~~ | ~~Low~~ | ✅ **Implemented** |
 | G8 | Persistent Thread Store | Medium | Production Readiness |
 | ~~G9~~ | ~~Health Check Endpoints~~ | ~~Low~~ | ✅ **Implemented** |
-| G10 | Groundedness Evaluation | Medium | Evaluations / Responsible AI |
+| ~~G10~~ | ~~Groundedness Evaluation~~ | ~~Medium~~ | ✅ **Implemented** |
 | G12 | Rate Limiting | Low | Responsible AI |
 | G14 | Accessibility (WCAG) | Medium | User Experience |
 | G15 | Frontend Error Resilience | Medium | Reliability |
@@ -648,7 +668,7 @@ readinessProbe:
 | External tools, APIs, MCP | ✅ MS Learn MCP, schedule tool, score tool | G18, G20 |
 | Demoable experience | ✅ CopilotKit chat, HITL cards, progress | G14, G17 |
 | Clear documentation | ✅ ARCHITECTURE.md, workflow.svg, docstrings | — |
-| Evaluations & telemetry | ⚠️ OTel tracing + 8 custom metrics (implemented), **E2E evaluation pipeline (6 evaluators, JSONL datasets, CLI)**, **Critic calibration (precision/recall/F1)** | G10 |
+| Evaluations & telemetry | ✅ OTel tracing + 8 custom metrics, **E2E evaluation pipeline (7 evaluators, JSONL datasets, CLI)**, **Critic calibration (precision/recall/F1)**, **Groundedness evaluation (G10)** | — |
 | Responsible AI | ✅ Critic gate, structured output, deterministic scoring, MCP fallback (CertInfo + LearningPathFetcher), bounded loops, **InputGuardExecutor**, **Output content safety gate** | G4, G11, G12, G19, G20 |
 | Planner-Executor | ✅ Coordinator → specialists | — |
 | Critic / Verifier | ✅ CriticExecutor with structured verdict + **output content safety gate** + **calibration evaluation** | — |
