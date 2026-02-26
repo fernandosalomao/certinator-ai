@@ -166,3 +166,16 @@ cycle_breaker_cap_reached = _meter.create_counter(
     ),
     unit="1",
 )
+
+# ---------------------------------------------------------------------------
+# Rate limiting (G12)
+# ---------------------------------------------------------------------------
+
+rate_limit_rejections = _meter.create_counter(
+    name="certinator.rate_limit.rejections",
+    description=(
+        "Requests rejected by rate limiting middleware. "
+        "Attributes: limit_type (ip/session), client_ip."
+    ),
+    unit="1",
+)

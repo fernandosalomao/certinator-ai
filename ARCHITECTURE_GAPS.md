@@ -47,7 +47,7 @@ Gap analysis comparing the current implementation against the [project requireme
 | **Clear documentation** — agent roles, reasoning flow, tool integrations | ✅ Implemented | ARCHITECTURE.md with Mermaid diagrams, workflow.svg, inline docstrings | — |
 | **Evaluations, telemetry, monitoring** | ✅ Implemented | OTel tracing, custom metrics (8 instruments), **end-to-end evaluation pipeline (7 custom evaluators, JSONL datasets, CLI orchestrator)**, **Critic calibration evaluation (precision/recall/F1)**, **Groundedness evaluation (G10)** | — |
 | **Advanced reasoning patterns** (planner-executor, critics, reflection loops) | ✅ Implemented | All four patterns implemented, **Coordinator CoT reasoning (G7)** | — |
-| **Responsible AI** (guardrails, validation, fallbacks) | ✅ Implemented | Critic gate, structured output, deterministic scoring, MCP fallback (CertInfo + LearningPathFetcher), bounded loops, **InputGuardExecutor (regex-based)**, **Output content safety in CriticExecutor** | G11, G12 |
+| **Responsible AI** (guardrails, validation, fallbacks) | ✅ Implemented | Critic gate, structured output, deterministic scoring, MCP fallback (CertInfo + LearningPathFetcher), bounded loops, **InputGuardExecutor (regex-based)**, **Output content safety in CriticExecutor**, **Rate limiting middleware (G12)** | G11 |
 
 ---
 
@@ -59,7 +59,7 @@ Gap analysis comparing the current implementation against the [project requireme
 | **Reasoning & Multi-step Thinking** | Strong | 5 reasoning patterns, typed message graph, conditional routing, revision loops, **Coordinator CoT audit trail (G7)** | — |
 | **Creativity & Originality** | Strong | Cross-route bidirectional flows (Practice ↔ StudyPlan), deterministic math offloading, dual-mode Practice agent, MCP fallback with disclaimer | — |
 | **User Experience & Presentation** | Good | CopilotKit v2 HITL, inline workflow progress, quiz session UI, offer cards | G13 (dynamic suggestions), G14 (accessibility), G17 (streaming) |
-| **Reliability & Safety** | Good | Bounded loops, transient error retry, question validation, structured output, **InputGuardExecutor (prompt injection + content safety + exam policy)**, **Output content safety gate**, **Cross-route cycle breaker (G4)**, **Health check endpoints (G9)** | G12, G15 |
+| **Reliability & Safety** | Good | Bounded loops, transient error retry, question validation, structured output, **InputGuardExecutor (prompt injection + content safety + exam policy)**, **Output content safety gate**, **Cross-route cycle breaker (G4)**, **Health check endpoints (G9)**, **Rate limiting (G12)** | G15 |
 
 ---
 
@@ -426,15 +426,39 @@ readinessProbe:
 | **Effort** | Low (1 day) |
 | **Requirement** | Responsible AI — guardrails |
 | **Criterion** | Reliability & Safety |
+| **Status** | ✅ **Implemented** |
 
-**Current state:** No rate limiting exists at the FastAPI layer. A single user or client could exhaust LLM quota.
+**Implementation:** Custom `RateLimiterMiddleware` (Starlette `BaseHTTPMiddleware`) in `src/rate_limiter.py` enforces per-IP and per-session sliding-window rate limits at the FastAPI layer.
 
-**Gap:** No per-session or per-IP rate limiting to prevent abuse.
+**What was built:**
+- **`RateLimiterMiddleware`** — Starlette middleware with two independent sliding-window counters (60-second window):
+  - **Per-IP** — limits requests from a single IP address (default: 60/min). Extracts client IP from `X-Forwarded-For` header or `request.client.host`.
+  - **Per-session** — limits requests per `threadId` / `thread_id` from the AG-UI JSON body (default: 20/min). Falls back to IP-only if body parsing fails.
+- **`_SlidingWindowCounter`** — in-memory sliding-window implementation using monotonic timestamps with lazy pruning of expired entries.
+- **Exempt paths** — `/health` and `/ready` are never rate-limited (preserves Kubernetes liveness/readiness probes).
+- **HTTP 429 response** — returns structured JSON with `error`, `detail` (human-readable message), and `retry_after` fields, plus a `Retry-After` header.
+- **Configuration** (env vars in `config.py`):
+  - `RATE_LIMIT_ENABLED` — toggle on/off (default: `true`)
+  - `RATE_LIMIT_PER_SESSION` — requests/min per thread_id (default: `20`)
+  - `RATE_LIMIT_PER_IP` — requests/min per IP (default: `60`)
+- **OTel metric** — `certinator.rate_limit.rejections` counter in `metrics.py` with `limit_type` (`ip`/`session`) and `client_ip` attributes.
+- **Middleware wiring** — added via `app.add_middleware(RateLimiterMiddleware)` in `app.py`'s `run_agui()` function.
+- **20 unit tests** in `tests/test_rate_limiter.py` — covering sliding-window counter logic, helper functions, 429 response structure, middleware integration (under-limit, over-limit, exempt paths, disabled mode, session isolation).
 
-**Recommended approach:**
-- Add FastAPI middleware using `slowapi` or custom rate limiter
-- Configure per-session (thread_id) and per-IP limits
-- Return HTTP 429 with a human-readable message when limits are exceeded
+**429 response format:**
+
+```json
+// POST / → 429
+{
+  "error": "rate_limit_exceeded",
+  "detail": "You've sent too many requests in this session. Please wait a moment before trying again.",
+  "retry_after": 42
+}
+```
+
+**Design decisions:**
+- Custom middleware over `slowapi` — avoids an extra dependency; `slowapi` doesn't natively support session keys from JSON bodies.
+- In-memory counters — matches the current in-memory thread store. When G8 (persistent thread store) is implemented, rate limiting can move to Redis too.
 
 ---
 
@@ -641,7 +665,7 @@ readinessProbe:
 | G8 | Persistent Thread Store | Medium | Production Readiness |
 | ~~G9~~ | ~~Health Check Endpoints~~ | ~~Low~~ | ✅ **Implemented** |
 | ~~G10~~ | ~~Groundedness Evaluation~~ | ~~Medium~~ | ✅ **Implemented** |
-| G12 | Rate Limiting | Low | Responsible AI |
+| ~~G12~~ | ~~Rate Limiting~~ | ~~Low~~ | ✅ **Implemented** |
 | G14 | Accessibility (WCAG) | Medium | User Experience |
 | G15 | Frontend Error Resilience | Medium | Reliability |
 
@@ -669,7 +693,7 @@ readinessProbe:
 | Demoable experience | ✅ CopilotKit chat, HITL cards, progress | G14, G17 |
 | Clear documentation | ✅ ARCHITECTURE.md, workflow.svg, docstrings | — |
 | Evaluations & telemetry | ✅ OTel tracing + 8 custom metrics, **E2E evaluation pipeline (7 evaluators, JSONL datasets, CLI)**, **Critic calibration (precision/recall/F1)**, **Groundedness evaluation (G10)** | — |
-| Responsible AI | ✅ Critic gate, structured output, deterministic scoring, MCP fallback (CertInfo + LearningPathFetcher), bounded loops, **InputGuardExecutor**, **Output content safety gate** | G4, G11, G12, G19, G20 |
+| Responsible AI | ✅ Critic gate, structured output, deterministic scoring, MCP fallback (CertInfo + LearningPathFetcher), bounded loops, **InputGuardExecutor**, **Output content safety gate**, **Rate limiting (G12)** | G4, G11, G19, G20 |
 | Planner-Executor | ✅ Coordinator → specialists | — |
 | Critic / Verifier | ✅ CriticExecutor with structured verdict + **output content safety gate** + **calibration evaluation** | — |
 | Self-reflection & Iteration | ✅ Revision loop with feedback | — |

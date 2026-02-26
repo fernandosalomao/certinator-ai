@@ -75,6 +75,14 @@ LLM_MODEL_STUDY_PLAN_GENERATOR: str = os.getenv(
     "LLM_MODEL_STUDY_PLAN_GENERATOR", LLM_MODEL_DEFAULT
 )
 
+# ── Rate Limiting (G12) ───────────────────────────────────────────────────
+# Toggle rate limiting on/off (default: enabled).
+RATE_LIMIT_ENABLED: bool = os.getenv("RATE_LIMIT_ENABLED", "true").lower() == "true"
+# Maximum requests per minute per session (thread_id).
+RATE_LIMIT_PER_SESSION: int = int(os.getenv("RATE_LIMIT_PER_SESSION", "20"))
+# Maximum requests per minute per IP address.
+RATE_LIMIT_PER_IP: int = int(os.getenv("RATE_LIMIT_PER_IP", "60"))
+
 # ── Feature Flags ─────────────────────────────────────────────────────────
 # Default number of practice questions per quiz session.
 DEFAULT_PRACTICE_QUESTIONS: int = int(os.getenv("DEFAULT_PRACTICE_QUESTIONS", "10"))

@@ -699,6 +699,13 @@ async def run_agui() -> None:
     add_agent_framework_fastapi_endpoint(app=app, agent=ag_agent, path="/")
 
     # ------------------------------------------------------------------
+    # Rate Limiting middleware (G12)
+    # ------------------------------------------------------------------
+    from rate_limiter import RateLimiterMiddleware
+
+    app.add_middleware(RateLimiterMiddleware)
+
+    # ------------------------------------------------------------------
     # Health check endpoints (G9)
     # ------------------------------------------------------------------
     _register_health_endpoints(app)
