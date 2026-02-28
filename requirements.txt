@@ -22,6 +22,9 @@ agent-framework-ag-ui==1.0.0b260107
 # Azure Identity for DefaultAzureCredential
 azure-identity
 
+# HTTP client for Microsoft Learn Catalog API
+requests>=2.31.0
+
 # Azure AI Projects SDK (Foundry agents v2)
 azure-ai-projects
 

@@ -115,36 +115,67 @@ class SpecialistOutput(BaseModel):
     )
 
 
-class LearningPathItem(BaseModel):
-    """A single Microsoft Learn learning path item."""
+class TrainingModule(BaseModel):
+    """A single Microsoft Learn training module within a learning path."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    name: str = Field(description="Title of the module.")
+    url: str = Field(description="MS Learn URL for the module.")
+    duration_minutes: float = Field(
+        description="Estimated completion time in minutes.",
+    )
+    unit_count: int = Field(
+        description="Number of units in the module.",
+    )
+
+
+class LearningPath(BaseModel):
+    """An official Microsoft Learn learning path for a certification.
+
+    Mirrors the MS Learn hierarchy: Learning Paths → Modules.
+    """
 
     model_config = ConfigDict(extra="forbid")
 
     name: str = Field(description="Title of the learning path.")
     url: str = Field(description="MS Learn URL for the learning path.")
-    duration_hours: float = Field(description="Estimated completion time in hours.")
-
-
-class LearningPathTopic(BaseModel):
-    """One exam topic with its weighted percentage and learning paths."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    name: str = Field(description="Official exam topic name.")
-    exam_weight_pct: float = Field(description="Exam weight (0-100) for this topic.")
-    learning_paths: list[LearningPathItem] = Field(
-        description="Official Microsoft Learn paths that cover this topic.",
+    duration_minutes: float = Field(
+        description="Total estimated completion time in minutes.",
+    )
+    module_count: int = Field(
+        description="Number of modules in the learning path.",
+    )
+    exam_topic: str = Field(
+        description=(
+            "Exam topic area this learning path covers "
+            "(e.g. 'Manage Azure identities and governance')."
+        ),
+    )
+    exam_weight_pct: float = Field(
+        description=(
+            "Exam weight percentage for the mapped topic area. "
+            "Use the midpoint of the published range "
+            "(e.g. 17.5 for '15-20%')."
+        ),
+    )
+    modules: list[TrainingModule] = Field(
+        description="Modules that compose this learning path.",
     )
 
 
 class LearningPathFetcherResponse(BaseModel):
-    """Structured response schema for LearningPathFetcher agent output."""
+    """Structured response schema for LearningPathFetcher agent output.
+
+    Mirrors the MS Learn content hierarchy:
+    Certification → Learning Paths → Modules (→ Units, not captured).
+    """
 
     model_config = ConfigDict(extra="forbid")
 
     certification: str = Field(description="Exam code such as AZ-900 or AZ-104.")
-    topics: list[LearningPathTopic] = Field(
-        description="Topic list with weighted coverage and learning paths.",
+    learning_paths: list[LearningPath] = Field(
+        description="Official Microsoft Learn learning paths for this certification.",
     )
 
 
@@ -152,15 +183,17 @@ class LearningPathsData(BaseModel):
     """Structured output from LearningPathFetcherExecutor.
 
     Flows from LearningPathFetcherExecutor → StudyPlanGeneratorExecutor
-    and carries all the topic/learning-path data the scheduler needs
+    and carries the learning-path / module hierarchy the scheduler needs
     to compute a feasible study schedule.
     """
 
     certification: str = Field(description="Exam code such as AZ-900 or AZ-104.")
-    topics: list[dict] = Field(
+    learning_paths: list[dict] = Field(
         description=(
-            "Full topics JSON array as returned by the fetcher agent. "
-            "Each element has: name, exam_weight_pct, learning_paths."
+            "Full learning paths JSON array as returned by the fetcher "
+            "agent. Each element has: name, url, duration_minutes, "
+            "module_count, modules (list of {name, url, duration_minutes, "
+            "unit_count})."
         ),
     )
     original_decision: "RoutingDecision" = Field(

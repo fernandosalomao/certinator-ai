@@ -9,7 +9,7 @@ Assertions checked:
     2. ``total_hours_planned`` <= ``total_hours_available`` * 1.15
        (within the 15 % tolerance used by the scheduler).
     3. ``total_weeks_needed`` <= ``total_weeks`` (from context).
-    4. All topics from the input appear in ``topics_summary``.
+    4. All expected exam topics appear in ``learning_path_summary``.
     5. Weekly plan hours sum to ``total_hours_planned``.
 
 Scoring (1-5 scale):
@@ -32,7 +32,8 @@ class StudyPlanFeasibilityEvaluator:
         - ``response``: JSON string output from
           ``schedule_study_plan()``.
         - ``context``: JSON string with ``hours_per_week``,
-          ``total_weeks``, and ``expected_topics`` (list[str]).
+          ``total_weeks``, and ``expected_topics`` (list[str] of
+          exam topic names).
     """
 
     def __call__(
@@ -81,7 +82,7 @@ class StudyPlanFeasibilityEvaluator:
             "total_hours_available",
             "total_hours_planned",
             "total_weeks_needed",
-            "topics_summary",
+            "learning_path_summary",
             "weekly_plan",
         }
         missing_keys = required_keys - set(plan.keys())
@@ -90,7 +91,7 @@ class StudyPlanFeasibilityEvaluator:
 
         planned_hours = plan.get("total_hours_planned", 0)
         weeks_needed = plan.get("total_weeks_needed", 0)
-        topics_summary = plan.get("topics_summary", [])
+        lp_summary = plan.get("learning_path_summary", [])
         weekly_plan = plan.get("weekly_plan", [])
 
         # ── 1. Hours within budget (15 % tolerance) ──────────────
@@ -108,8 +109,15 @@ class StudyPlanFeasibilityEvaluator:
                 f"{total_weeks} are available."
             )
 
-        # ── 3. Topic coverage ────────────────────────────────────
-        summary_topics = {t.get("topic", "").lower() for t in topics_summary}
+        # ── 3. Topic coverage (matches on exam_topic or learning_path) ──
+        summary_topics = set()
+        for lp in lp_summary:
+            exam_topic = lp.get("exam_topic", "").lower()
+            lp_name = lp.get("learning_path", "").lower()
+            if exam_topic:
+                summary_topics.add(exam_topic)
+            if lp_name:
+                summary_topics.add(lp_name)
         for expected in expected_topics:
             matched = any(
                 expected.lower() in st or st in expected.lower()

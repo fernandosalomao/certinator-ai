@@ -40,7 +40,7 @@ from safety import SAFETY_SYSTEM_PROMPT
 
 # ### Topic Coverage and Distribution
 # - Assign at least one question to EVERY topic in the input list.
-# - Distribute remaining questions proportionally to `exam_weight_pct`. \
+# - Distribute remaining questions proportionally to `weight_pct`. \
 #   Round to the nearest integer; give any rounding remainder to the \
 #   highest-weight topic.
 # - When a focus area is specified (post-quiz retry), weight questions \

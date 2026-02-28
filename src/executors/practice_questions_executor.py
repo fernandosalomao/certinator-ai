@@ -547,8 +547,7 @@ class PracticeQuestionsExecutor(Executor):
             list[PracticeQuestion]: Parsed questions or empty.
         """
         topic_list = "\n".join(
-            f"- {t.get('name', 'Unknown')} ({t.get('exam_weight_pct', 0)}%)"
-            for t in topics
+            f"- {t.get('name', 'Unknown')} ({t.get('weight_pct', 0)}%)" for t in topics
         )
         prompt = (
             f"Generate exactly {count} multiple-choice "
@@ -859,14 +858,16 @@ class PracticeQuestionsExecutor(Executor):
         prompt = (
             f"Certification: {cert}\n\n"
             "Fetch exam topic names and percentage weights. "
-            "Return data matching the configured structured "
-            "schema."
+            "You MUST use the microsoft_docs_search tool to retrieve "
+            "real data \u2014 do NOT answer from memory.\n\n"
+            "After gathering data via tool calls, return a single "
+            "JSON object matching the LearningPathFetcherResponse schema."
         )
         try:
+            # Do NOT pass response_format — it prevents tool calls.
             response = await safe_agent_run(
                 self.learning_path_agent,
                 [ChatMessage(role=Role.USER, text=prompt)],
-                response_format=LearningPathFetcherResponse,
             )
         except Exception as exc:
             logger.error(
@@ -875,8 +876,8 @@ class PracticeQuestionsExecutor(Executor):
                 exc,
                 exc_info=True,
             )
-            return [{"name": f"{cert} General", "exam_weight_pct": 100}]
-        topics = self._extract_topic_weights(response)
+            return [{"name": f"{cert} General", "weight_pct": 100}]
+        topics = self._extract_topic_distribution(response)
         if topics:
             return topics
 
@@ -885,45 +886,86 @@ class PracticeQuestionsExecutor(Executor):
             cert,
         )
         return [
-            {"name": f"{cert} General", "exam_weight_pct": 100},
+            {"name": f"{cert} General", "weight_pct": 100},
         ]
 
     @staticmethod
-    def _extract_topic_weights(
+    def _extract_topic_distribution(
         response: Any,
     ) -> list[dict]:
-        """Extract topic names and weights from structured response.
+        """Extract topic names and exam weights from structured response.
+
+        Uses learning path names as topic areas. Prefers the
+        ``exam_weight_pct`` field when available (set by the agent
+        from official exam topic weights); falls back to deriving
+        proportional weights from durations.
 
         Parameters:
             response (Any): Agent response.
 
         Returns:
-            list[dict]: Topic dictionaries.
+            list[dict]: Topic dictionaries with ``name``
+                and ``weight_pct``.
         """
         structured = getattr(response, "value", None)
 
-        if isinstance(structured, LearningPathFetcherResponse):
-            return [
-                {
-                    "name": topic.name,
-                    "exam_weight_pct": topic.exam_weight_pct,
-                }
-                for topic in structured.topics
-            ]
+        # Import the robust parser that handles string/dict/validated responses
+        from executors.learning_path_fetcher_executor import (
+            LearningPathFetcherExecutor,
+        )
+
+        parsed = LearningPathFetcherExecutor._parse_response_value(response)
+        if parsed is not None:
+            structured = parsed
 
         if isinstance(structured, dict):
-            validated = LearningPathFetcherResponse.model_validate(
-                structured,
-            )
+            try:
+                structured = LearningPathFetcherResponse.model_validate(
+                    structured,
+                )
+            except Exception:
+                return []
+
+        if not isinstance(structured, LearningPathFetcherResponse):
+            return []
+
+        paths = structured.learning_paths
+        if not paths:
+            return []
+
+        # Check if exam weights are available (any path has exam_weight_pct > 0)
+        has_exam_weights = any(lp.exam_weight_pct > 0 for lp in paths)
+
+        if has_exam_weights:
+            # Group by exam_topic to avoid duplicates when multiple
+            # learning paths share the same exam topic.
+            topic_weights: dict[str, float] = {}
+            for lp in paths:
+                topic = lp.exam_topic or lp.name
+                if topic not in topic_weights:
+                    topic_weights[topic] = lp.exam_weight_pct
+            # Normalise so weights sum to 100
+            total_weight = sum(topic_weights.values()) or 1
             return [
                 {
-                    "name": topic.name,
-                    "exam_weight_pct": topic.exam_weight_pct,
+                    "name": topic,
+                    "weight_pct": max(round(weight / total_weight * 100), 1),
                 }
-                for topic in validated.topics
+                for topic, weight in topic_weights.items()
             ]
 
-        return []
+        # Fallback: derive weights from durations
+        total_minutes = sum(lp.duration_minutes for lp in paths) or 1
+        result: list[dict] = []
+        cumulative = 0
+        for i, lp in enumerate(paths):
+            if i == len(paths) - 1:
+                pct = 100 - cumulative
+            else:
+                pct = round(lp.duration_minutes / total_minutes * 100)
+                cumulative += pct
+            result.append({"name": lp.name, "weight_pct": max(pct, 1)})
+        return result
 
     @staticmethod
     def _extract_question_count(

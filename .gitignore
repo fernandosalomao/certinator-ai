@@ -259,3 +259,4 @@ next-env.d.ts
 debug*.png
 .github/debug/*
 evaluations/results/*
+cache/*

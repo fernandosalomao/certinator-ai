@@ -143,18 +143,24 @@ class TestStudyPlanFeasibilityEvaluator:
             "total_hours_available": 80.0,
             "total_hours_planned": 72.0,
             "total_weeks_needed": 8,
-            "topics_summary": [
+            "learning_path_summary": [
                 {
-                    "topic": "Topic A",
+                    "learning_path": "LP Alpha",
+                    "exam_topic": "Topic A",
                     "exam_weight_pct": 50,
-                    "selected_hours": 36.0,
-                    "paths_skipped": 0,
+                    "total_minutes": 2160,
+                    "modules_included": 6,
+                    "modules_skipped": 0,
+                    "selected_minutes": 2160,
                 },
                 {
-                    "topic": "Topic B",
+                    "learning_path": "LP Beta",
+                    "exam_topic": "Topic B",
                     "exam_weight_pct": 50,
-                    "selected_hours": 36.0,
-                    "paths_skipped": 0,
+                    "total_minutes": 2160,
+                    "modules_included": 6,
+                    "modules_skipped": 0,
+                    "selected_minutes": 2160,
                 },
             ],
             "weekly_plan": [
@@ -180,7 +186,7 @@ class TestStudyPlanFeasibilityEvaluator:
             "total_hours_available": 30.0,
             "total_hours_planned": 60.0,
             "total_weeks_needed": 3,
-            "topics_summary": [],
+            "learning_path_summary": [],
             "weekly_plan": [
                 {"week": 1, "hours": 20.0, "items": []},
                 {"week": 2, "hours": 20.0, "items": []},
@@ -204,7 +210,7 @@ class TestStudyPlanFeasibilityEvaluator:
             "total_hours_available": 30.0,
             "total_hours_planned": 30.0,
             "total_weeks_needed": 6,
-            "topics_summary": [],
+            "learning_path_summary": [],
             "weekly_plan": [
                 {"week": i, "hours": 5.0, "items": []} for i in range(1, 7)
             ],
@@ -231,12 +237,15 @@ class TestStudyPlanFeasibilityEvaluator:
             "total_hours_available": 40.0,
             "total_hours_planned": 30.0,
             "total_weeks_needed": 3,
-            "topics_summary": [
+            "learning_path_summary": [
                 {
-                    "topic": "Topic A",
+                    "learning_path": "LP Alpha",
+                    "exam_topic": "Topic A",
                     "exam_weight_pct": 100,
-                    "selected_hours": 30.0,
-                    "paths_skipped": 0,
+                    "total_minutes": 1800,
+                    "modules_included": 5,
+                    "modules_skipped": 0,
+                    "selected_minutes": 1800,
                 },
             ],
             "weekly_plan": [

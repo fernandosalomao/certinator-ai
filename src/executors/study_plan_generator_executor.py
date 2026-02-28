@@ -1,12 +1,11 @@
 """
 Certinator AI — Study Plan Generator Executor
 
-Workflow node that converts structured topic/learning-path data into a
+Workflow node that converts structured learning-path / module data into a
 concrete, week-by-week study plan.  Receives ``LearningPathsData`` from
-``LearningPathFetcherExecutor``, then instructs the StudyPlanGeneratorAgent
-(equipped with the ``schedule_study_plan`` math tool) to generate a
-Markdown schedule.  Output flows to ``CriticExecutor`` for quality
-validation.
+``LearningPathFetcherExecutor``, then computes a deterministic schedule
+and asks the StudyPlanGeneratorAgent to format it as Markdown.
+Output flows to ``CriticExecutor`` for quality validation.
 
 Graph position::
 
@@ -43,7 +42,7 @@ logger = logging.getLogger(__name__)
 
 class StudyPlanGeneratorExecutor(Executor):
     """
-    Generate a week-by-week study plan using topic data + a math tool.
+    Generate a week-by-week study plan from learning paths + modules.
 
     Flow (initial):
     1. Receive ``LearningPathsData`` from the fetcher.
@@ -85,7 +84,7 @@ class StudyPlanGeneratorExecutor(Executor):
         Schedule the study plan and forward to the Critic.
 
         Parameters:
-            data (LearningPathsData): Topics + original routing decision.
+            data (LearningPathsData): Learning paths + original routing decision.
             ctx (WorkflowContext): Workflow context for messaging.
         """
         await update_workflow_progress(
@@ -152,7 +151,7 @@ class StudyPlanGeneratorExecutor(Executor):
             f"Student request: {revision.original_decision.task}\n"
             f"Student context: {revision.original_decision.context}\n"
             "Please address all feedback points. "
-            "Use the schedule_study_plan tool if you need to recalculate hours."
+            "Do NOT recalculate hours — use the same schedule data."
         )
         plan_messages = [ChatMessage(role=Role.USER, text=prompt)]
 
@@ -201,14 +200,12 @@ class StudyPlanGeneratorExecutor(Executor):
         self,
         data: LearningPathsData,
     ) -> str:
-        """Build a prompt with topics JSON + context and run the agent.
-
-        The deterministic schedule computation (``schedule_study_plan``)
-        runs first, then the LLM formats it as Markdown.
+        """Build a prompt with learning paths JSON + context, compute
+        the schedule deterministically, then ask the LLM to format it.
 
         Parameters:
-            data (LearningPathsData): Topics and original routing
-                decision.
+            data (LearningPathsData): Learning paths and original
+                routing decision.
 
         Returns:
             str: Generated study plan in Markdown format.
@@ -220,17 +217,18 @@ class StudyPlanGeneratorExecutor(Executor):
             task=decision.task,
             context=decision.context,
         )
-        topics_json = json.dumps(data.topics, ensure_ascii=False)
+        learning_paths_json = json.dumps(data.learning_paths, ensure_ascii=False)
 
         logger.info(
-            "StudyPlanGenerator: invoking schedule_study_plan (hours_per_week=%s, total_weeks=%s, prioritize_by_date=%s)",
+            "StudyPlanGenerator: invoking schedule_study_plan "
+            "(hours_per_week=%s, total_weeks=%s, prioritize_by_date=%s)",
             constraints["hours_per_week"],
             constraints["total_weeks"],
             constraints["prioritize_by_date"],
         )
 
         schedule_json_text = schedule_study_plan(
-            topics=topics_json,
+            learning_paths=learning_paths_json,
             hours_per_week=constraints["hours_per_week"],
             total_weeks=constraints["total_weeks"],
             prioritize_by_date=constraints["prioritize_by_date"],
@@ -242,12 +240,13 @@ class StudyPlanGeneratorExecutor(Executor):
             f"Create a personalised study plan for {cert}.\n\n"
             f"Student request: {decision.task}\n"
             f"Student context: {decision.context}\n\n"
-            f"Computed schedule JSON (already calculated):\n"
+            f"Computed schedule JSON (already calculated — do NOT recalculate):\n"
             f"```json\n{schedule_pretty}\n```\n\n"
             "Convert this schedule to a student-friendly Markdown response. "
             "Do NOT return JSON. "
-            "Include: summary, week-by-week plan, coverage table, skipped paths, "
-            "and exam tips."
+            "Include: summary, week-by-week plan grouped by learning path, "
+            "learning path coverage table, skipped modules (if any), "
+            "scheduler notes, and exam tips."
         )
         plan_messages = [ChatMessage(role=Role.USER, text=prompt)]
 
@@ -271,7 +270,8 @@ class StudyPlanGeneratorExecutor(Executor):
             raise
         if self._looks_like_json(plan_text):
             logger.warning(
-                "StudyPlanGenerator: agent returned JSON; using deterministic Markdown fallback"
+                "StudyPlanGenerator: agent returned JSON; "
+                "using deterministic Markdown fallback"
             )
             return self._render_markdown_from_schedule(
                 cert=cert,
@@ -290,7 +290,12 @@ class StudyPlanGeneratorExecutor(Executor):
                 return parsed
         except json.JSONDecodeError:
             pass
-        return {"weekly_plan": [], "topics_summary": [], "notes": []}
+        return {
+            "weekly_plan": [],
+            "learning_path_summary": [],
+            "skipped_modules": [],
+            "notes": [],
+        }
 
     @staticmethod
     def _looks_like_json(text: str) -> bool:
@@ -361,47 +366,88 @@ class StudyPlanGeneratorExecutor(Executor):
         lines.append(f"- **Timeline:** {total_weeks} weeks")
         lines.append(f"- **Availability:** {hours_per_week:.1f} hours/week")
         coverage = schedule_data.get("coverage_pct", 0)
-        lines.append(f"- **Coverage estimate:** {coverage}%")
+        lines.append(f"- **Coverage:** {coverage}% of modules included")
+        total_planned = schedule_data.get("total_hours_planned", 0)
+        total_available = schedule_data.get("total_hours_available", 0)
+        lines.append(
+            f"- **Study time:** {total_planned}h planned / {total_available}h available"
+        )
         lines.append("")
 
         for week in schedule_data.get("weekly_plan", []):
             week_num = week.get("week", "?")
             week_hours = week.get("hours", 0)
             lines.append(f"## Week {week_num} ({week_hours}h)")
+
+            # Group items by learning path
+            current_lp = None
             for item in week.get("items", []):
-                lp_name = item.get("learning_path", "Learning path")
+                lp_name = item.get("learning_path", "")
+                mod_name = item.get("module", "Module")
                 url = item.get("url", "")
-                topic = item.get("topic", "Topic")
                 item_hours = item.get("hours", 0)
+
+                if lp_name != current_lp:
+                    lines.append(f"\n**{lp_name}**")
+                    current_lp = lp_name
+
                 if url:
-                    lines.append(f"- **{topic}**: [{lp_name}]({url}) ({item_hours}h)")
+                    lines.append(f"- [{mod_name}]({url}) — {item_hours}h")
                 else:
-                    lines.append(f"- **{topic}**: {lp_name} ({item_hours}h)")
+                    lines.append(f"- {mod_name} — {item_hours}h")
             lines.append("")
 
-        lines.append("## Coverage Summary")
-        lines.append("| Topic | Weight % | Hours | Skipped Paths |")
-        lines.append("|---|---:|---:|---:|")
-        for topic in schedule_data.get("topics_summary", []):
+        # Learning path coverage summary
+        lp_summary = schedule_data.get("learning_path_summary", [])
+        if lp_summary:
+            lines.append("## Learning Path Coverage")
             lines.append(
-                "| "
-                f"{topic.get('topic', 'N/A')} | "
-                f"{topic.get('exam_weight_pct', 0)} | "
-                f"{topic.get('selected_hours', 0)} | "
-                f"{topic.get('paths_skipped', 0)} |"
+                "| Exam Topic | Weight | Learning Path | Total Time | "
+                "Modules Included | Modules Skipped |"
             )
-        lines.append("")
+            lines.append("|---|---:|---|---:|---:|---:|")
+            for lp in lp_summary:
+                total_min = lp.get("total_minutes", 0)
+                hours_str = f"{round(total_min / 60, 1)}h"
+                exam_topic = lp.get("exam_topic", "")
+                weight = lp.get("exam_weight_pct", 0)
+                weight_str = f"{weight}%" if weight else "—"
+                lines.append(
+                    f"| {exam_topic or '—'} | "
+                    f"{weight_str} | "
+                    f"{lp.get('learning_path', 'N/A')} | "
+                    f"{hours_str} | "
+                    f"{lp.get('modules_included', 0)} | "
+                    f"{lp.get('modules_skipped', 0)} |"
+                )
+            lines.append("")
+
+        # Skipped modules
+        skipped = schedule_data.get("skipped_modules", [])
+        if skipped:
+            lines.append("## Skipped Modules")
+            lines.append("*These modules are recommended if time allows.*\n")
+            for mod in skipped:
+                url = mod.get("url", "")
+                name = mod.get("module", "Module")
+                lp = mod.get("learning_path", "")
+                dur = round(mod.get("duration_minutes", 0) / 60, 2)
+                if url:
+                    lines.append(f"- **{lp}**: [{name}]({url}) — {dur}h")
+                else:
+                    lines.append(f"- **{lp}**: {name} — {dur}h")
+            lines.append("")
 
         notes = schedule_data.get("notes", [])
         if notes:
             lines.append("## Notes")
             for note in notes:
-                lines.append(f"- {note}")
+                lines.append(f"> {note}")
             lines.append("")
 
         lines.append("## Exam Tips")
-        lines.append("- Reserve one session each week for review and weak topics.")
-        lines.append("- Retake Microsoft Learn checks after revising missed concepts.")
+        lines.append("- Reserve one session each week for review and weak areas.")
+        lines.append("- Complete the knowledge checks in each Microsoft Learn module.")
         lines.append("- In the final week, focus on breadth and timing practice.")
 
         return "\n".join(lines).strip()

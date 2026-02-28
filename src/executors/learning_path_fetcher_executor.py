@@ -3,9 +3,9 @@ Certinator AI — Learning Path Fetcher Executor
 
 Workflow node that sits between CoordinatorExecutor and
 StudyPlanGeneratorExecutor.  Uses the LearningPathFetcherAgent (which
-has the MS Learn MCP tool) to retrieve exam topics, their percentage
-weights, and the corresponding Microsoft Learn learning paths with
-estimated durations.  Output is a structured LearningPathsData message
+has the MS Learn MCP tool + Catalog API tool) to retrieve the official
+Microsoft Learn training hierarchy (Learning Paths → Modules) for a
+certification.  Output is a structured LearningPathsData message
 consumed by StudyPlanGeneratorExecutor.
 
 Graph position::
@@ -13,8 +13,10 @@ Graph position::
     CoordinatorExecutor ──► LearningPathFetcherExecutor ──► StudyPlanGeneratorExecutor
 """
 
+import json
 import logging
-from typing import Any, Optional
+import re
+from typing import Any
 
 from agent_framework import (
     ChatAgent,
@@ -33,78 +35,40 @@ from executors.models import (
     RoutingDecision,
     StudyPlanFromQuizRequest,
 )
-from tools.mcp import is_mcp_error
 
 logger = logging.getLogger(__name__)
-
-# ---------------------------------------------------------------------------
-# MCP unavailability fallback message
-# ---------------------------------------------------------------------------
-
-_MCP_UNAVAILABLE_STUDY_PLAN_TEMPLATE = (
-    "\u26a0\ufe0f **Microsoft Learn is temporarily unavailable.** "
-    "I\u2019m unable to fetch live exam topics and learning paths for "
-    "**{cert}** right now.\n\n"
-    "While the service is down, you can:\n"
-    "- Browse this certification at "
-    "[Microsoft Learn Certifications]("
-    "https://learn.microsoft.com/en-us/certifications/)\n"
-    "- Search for **{cert}** training on "
-    "[learn.microsoft.com/training]("
-    "https://learn.microsoft.com/en-us/training/)\n\n"
-    "Please try again shortly \u2014 I\u2019ll generate a personalised "
-    "study plan with live Microsoft Learn data once the service is "
-    "restored."
-)
-
-
-def _mcp_unavailable_msg(cert: str) -> str:
-    """
-    Return a user-facing message for when MS Learn MCP is unavailable.
-
-    Parameters:
-        cert (str): Certification code or display name.
-
-    Returns:
-        str: Formatted unavailability message with actionable suggestions.
-    """
-    return _MCP_UNAVAILABLE_STUDY_PLAN_TEMPLATE.format(cert=cert)
 
 
 class LearningPathFetcherExecutor(Executor):
     """
-    Fetch exam topics and learning paths from Microsoft Learn.
+    Fetch official Microsoft Learn learning paths and modules.
 
     Uses the LearningPathFetcherAgent (equipped with the MS Learn MCP
-    tool) to search for exam objectives, skill weights, and the
-    corresponding official learning paths with their durations.
+    tool and the Catalog API tool) to retrieve the training hierarchy
+    for a certification: Learning Paths → Modules.
 
-    The agent is called with a structured response format and this
-    executor emits a ``LearningPathsData`` message to the
+    The agent is called without response_format so it can invoke tools
+    freely; this executor parses the JSON response from the agent's
+    text output and emits a ``LearningPathsData`` message to the
     ``StudyPlanGeneratorExecutor``.
     """
 
     learning_path_agent: ChatAgent
-    learning_path_fallback_agent: Optional[ChatAgent]
 
     def __init__(
         self,
         learning_path_agent: ChatAgent,
-        learning_path_fallback_agent: Optional[ChatAgent] = None,
         id: str = "learning-path-fetcher-executor",
     ):
         """
         Initialise with the learning path fetcher agent.
 
         Parameters:
-            learning_path_agent (ChatAgent): Agent with MS Learn MCP access.
-            learning_path_fallback_agent (Optional[ChatAgent]): Agent without
-                MCP used when ``learn.microsoft.com/api/mcp`` is down.
-                When ``None``, MCP failures emit a generic error message.
+            learning_path_agent (ChatAgent): Agent with MCP + Catalog
+                API tool access.
             id (str): Executor identifier in the workflow graph.
         """
         self.learning_path_agent = learning_path_agent
-        self.learning_path_fallback_agent = learning_path_fallback_agent
         super().__init__(id=id)
 
     @handler
@@ -114,7 +78,7 @@ class LearningPathFetcherExecutor(Executor):
         ctx: WorkflowContext[LearningPathsData],
     ) -> None:
         """
-        Fetch topics + learning paths and forward to StudyPlanScheduler.
+        Fetch learning paths + modules and forward to StudyPlanGenerator.
 
         Parameters:
             decision (RoutingDecision): Routing decision from Coordinator.
@@ -125,7 +89,7 @@ class LearningPathFetcherExecutor(Executor):
             ctx=ctx,
             route="study-plan-generator",
             active_executor=self.id,
-            message="Learning Path Fetcher Agent: Fetching official Microsoft Learn topics and paths...",
+            message="Learning Path Fetcher Agent: Fetching official Microsoft Learn learning paths and modules...",
             current_step=2,
             total_steps=5,
         )
@@ -134,96 +98,25 @@ class LearningPathFetcherExecutor(Executor):
         prompt = (
             f"Certification: {cert}\n\n"
             f"Student request context: {decision.task} — {decision.context}\n\n"
-            "Fetch the exam objectives with percentage weights and all "
-            "official Microsoft Learn learning paths (with duration in hours) "
-            "for this certification. Return data that matches the configured "
-            "structured response schema."
+            "After gathering all data via tool calls, return a single "
+            "JSON object matching the LearningPathFetcherResponse schema."
         )
-        messages = [ChatMessage(role=Role.USER, text=prompt)]
-        try:
-            response = await safe_agent_run(
-                self.learning_path_agent,
-                messages,
-                response_format=LearningPathFetcherResponse,
-            )
-            metrics.mcp_calls.add(
-                1,
-                {"executor": "learning-path-fetcher", "status": "success"},
-            )
-        except Exception as exc:
-            metrics.mcp_calls.add(
-                1,
-                {"executor": "learning-path-fetcher", "status": "error"},
-            )
-            if is_mcp_error(exc) and self.learning_path_fallback_agent is not None:
-                metrics.mcp_unavailable_events.add(
-                    1,
-                    {
-                        "executor": "learning-path-fetcher",
-                        "degraded": "true",
-                    },
-                )
-                logger.warning(
-                    "LearningPathFetcher MCP unavailable; degrading to "
-                    "general knowledge: %s",
-                    exc,
-                )
-                try:
-                    response = await self._fetch_with_fallback(prompt)
-                except Exception as fallback_exc:
-                    logger.error(
-                        "LearningPathFetcher fallback agent failed: %s",
-                        fallback_exc,
-                        exc_info=True,
-                    )
-                    await emit_response(
-                        ctx,
-                        self.id,
-                        "I encountered an issue retrieving that "
-                        "information. Please try again.",
-                    )
-                    return
-            elif is_mcp_error(exc):
-                metrics.mcp_unavailable_events.add(
-                    1,
-                    {
-                        "executor": "learning-path-fetcher",
-                        "degraded": "false",
-                    },
-                )
-                logger.warning(
-                    "LearningPathFetcher MCP unavailable for %s: %s",
-                    cert,
-                    exc,
-                )
-                await emit_response(ctx, self.id, _mcp_unavailable_msg(cert))
-                return
-            else:
-                logger.error(
-                    "LearningPathFetcher agent call failed for %s: %s",
-                    cert,
-                    exc,
-                    exc_info=True,
-                )
-                await emit_response(
-                    ctx,
-                    self.id,
-                    "I encountered an issue retrieving that information. "
-                    "Please try again.",
-                )
-                return
+        response = await self._run_agent(prompt, cert, ctx)
+        if response is None:
+            return
 
-        topics = self._extract_topics(response, cert)
+        learning_paths = self._extract_learning_paths(response, cert)
 
         logger.info(
-            "LearningPathFetcher: found %d topics for %s",
-            len(topics),
+            "LearningPathFetcher: found %d learning paths for %s",
+            len(learning_paths),
             cert,
         )
+
         await ctx.send_message(
             LearningPathsData(
                 certification=cert,
-                topics=topics,
+                learning_paths=learning_paths,
                 original_decision=decision,
             )
         )
@@ -237,7 +130,7 @@ class LearningPathFetcherExecutor(Executor):
         """Fetch learning paths for a post-quiz study plan.
 
         Triggered when a student fails a practice quiz and wants
-        a focused study plan.  Fetches full topic data and forwards
+        a focused study plan.  Fetches full training data and forwards
         to StudyPlanGeneratorExecutor via LearningPathsData.
 
         Parameters:
@@ -265,98 +158,28 @@ class LearningPathFetcherExecutor(Executor):
             f"Certification: {cert}\n\n"
             f"The student needs help with these specific "
             f"topics: {weak_str}\n\n"
-            "Fetch the exam objectives with percentage "
-            "weights and all official Microsoft Learn "
-            "learning paths (with duration in hours) for "
-            "this certification. Return data that matches "
-            "the configured structured response schema."
+            "Fetch the official Microsoft Learn training content for "
+            "this certification. Use the tools described in your "
+            "instructions to get all learning paths and their "
+            "modules.\n\n"
+            "After gathering all data via tool calls, return a single "
+            "JSON object matching the LearningPathFetcherResponse schema."
         )
-        messages = [ChatMessage(role=Role.USER, text=prompt)]
-        try:
-            response = await safe_agent_run(
-                self.learning_path_agent,
-                messages,
-                response_format=LearningPathFetcherResponse,
-            )
-            metrics.mcp_calls.add(
-                1,
-                {"executor": "learning-path-fetcher", "status": "success"},
-            )
-        except Exception as exc:
-            metrics.mcp_calls.add(
-                1,
-                {"executor": "learning-path-fetcher", "status": "error"},
-            )
-            if is_mcp_error(exc) and self.learning_path_fallback_agent is not None:
-                metrics.mcp_unavailable_events.add(
-                    1,
-                    {
-                        "executor": "learning-path-fetcher",
-                        "degraded": "true",
-                    },
-                )
-                logger.warning(
-                    "LearningPathFetcher MCP unavailable for post-quiz plan; "
-                    "degrading to general knowledge: %s",
-                    exc,
-                )
-                try:
-                    response = await self._fetch_with_fallback(prompt)
-                except Exception as fallback_exc:
-                    logger.error(
-                        "LearningPathFetcher fallback agent failed for "
-                        "post-quiz plan: %s",
-                        fallback_exc,
-                        exc_info=True,
-                    )
-                    await emit_response(
-                        ctx,
-                        self.id,
-                        "I encountered an issue retrieving that "
-                        "information. Please try again.",
-                    )
-                    return
-            elif is_mcp_error(exc):
-                metrics.mcp_unavailable_events.add(
-                    1,
-                    {
-                        "executor": "learning-path-fetcher",
-                        "degraded": "false",
-                    },
-                )
-                logger.warning(
-                    "LearningPathFetcher MCP unavailable for post-quiz plan (%s): %s",
-                    cert,
-                    exc,
-                )
-                await emit_response(ctx, self.id, _mcp_unavailable_msg(cert))
-                return
-            else:
-                logger.error(
-                    "LearningPathFetcher agent call failed for post-quiz plan (%s): %s",
-                    cert,
-                    exc,
-                    exc_info=True,
-                )
-                await emit_response(
-                    ctx,
-                    self.id,
-                    "I encountered an issue retrieving that information. "
-                    "Please try again.",
-                )
-                return
+        response = await self._run_agent(prompt, cert, ctx)
+        if response is None:
+            return
 
-        topics = self._extract_topics(response, cert)
+        learning_paths = self._extract_learning_paths(response, cert)
 
         logger.info(
-            "LearningPathFetcher: found %d topics for post-quiz study plan (%s)",
-            len(topics),
+            "LearningPathFetcher: found %d learning paths for post-quiz study plan (%s)",
+            len(learning_paths),
             cert,
         )
         await ctx.send_message(
             LearningPathsData(
                 certification=cert,
-                topics=topics,
+                learning_paths=learning_paths,
                 original_decision=request.original_decision,
             )
         )
@@ -365,31 +188,133 @@ class LearningPathFetcherExecutor(Executor):
     # Internal helpers
     # ------------------------------------------------------------------
 
-    async def _fetch_with_fallback(self, prompt: str) -> Any:
+    async def _run_agent(
+        self,
+        prompt: str,
+        cert: str,
+        ctx: WorkflowContext,
+    ) -> Any | None:
         """
-        Fetch learning paths using the fallback agent (no MCP).
-
-        Called when the primary MCP-equipped agent fails due to MCP
-        unavailability and a fallback agent is configured.
+        Run the learning path agent and handle errors.
 
         Parameters:
-            prompt (str): The original prompt to send to the fallback agent.
+            prompt (str): The prompt to send to the agent.
+            cert (str): Certification code for logging/metrics.
+            ctx (WorkflowContext): Workflow context for error messages.
 
         Returns:
-            Any: Agent response with structured learning path data.
+            Any | None: Agent response, or None if the call failed.
         """
         messages = [ChatMessage(role=Role.USER, text=prompt)]
-        response = await safe_agent_run(
-            self.learning_path_fallback_agent,
-            messages,
-            response_format=LearningPathFetcherResponse,
-        )
-        return response
+        try:
+            # NOTE: Do NOT pass response_format here.
+            # When response_format is set, the model short-circuits to
+            # structured JSON output and skips tool calls entirely — the
+            # MCP/catalog tools never fire.  Instead, let the agent call
+            # tools freely and return unstructured text; we parse the
+            # JSON response in _extract_learning_paths().
+            response = await safe_agent_run(
+                self.learning_path_agent,
+                messages,
+            )
+            metrics.mcp_calls.add(
+                1,
+                {"executor": "learning-path-fetcher", "status": "success"},
+            )
+            return response
+        except Exception as exc:
+            metrics.mcp_calls.add(
+                1,
+                {"executor": "learning-path-fetcher", "status": "error"},
+            )
+            logger.error(
+                "LearningPathFetcher agent call failed for %s: %s",
+                cert,
+                exc,
+                exc_info=True,
+            )
+            await emit_response(
+                ctx,
+                self.id,
+                "I encountered an issue retrieving that information. Please try again.",
+            )
+            return None
 
     @staticmethod
-    def _extract_topics(response: Any, cert: str) -> list[dict]:
+    def _parse_response_value(response: Any) -> LearningPathFetcherResponse | None:
+        """Parse the agent response into a LearningPathFetcherResponse.
+
+        Handles three formats:
+        1. Already a LearningPathFetcherResponse (from response_format)
+        2. A dict (partial structured output)
+        3. A string containing JSON (from tool-use flow without
+           response_format)
+
+        Returns:
+            LearningPathFetcherResponse | None: Parsed response, or
+                None if parsing fails.
         """
-        Extract structured topics from an agent response object.
+        structured = getattr(response, "value", None)
+
+        # Case 1: already validated
+        if isinstance(structured, LearningPathFetcherResponse):
+            return structured
+
+        # Case 2: dict
+        if isinstance(structured, dict):
+            try:
+                return LearningPathFetcherResponse.model_validate(structured)
+            except Exception:
+                pass
+
+        # Case 3: string — extract JSON from text (may be wrapped in
+        # markdown code fences or surrounded by prose)
+        text = None
+        if isinstance(structured, str):
+            text = structured
+        elif hasattr(response, "value") and isinstance(response.value, str):
+            text = response.value
+
+        if text:
+            # Try to find a JSON object in the text
+            # First try: raw JSON parse
+            try:
+                data = json.loads(text)
+                if isinstance(data, dict):
+                    return LearningPathFetcherResponse.model_validate(data)
+            except (json.JSONDecodeError, Exception):
+                pass
+
+            # Second try: extract from markdown code fences
+            json_match = re.search(
+                r"```(?:json)?\s*\n?(.*?)\n?\s*```",
+                text,
+                re.DOTALL,
+            )
+            if json_match:
+                try:
+                    data = json.loads(json_match.group(1))
+                    if isinstance(data, dict):
+                        return LearningPathFetcherResponse.model_validate(data)
+                except (json.JSONDecodeError, Exception):
+                    pass
+
+            # Third try: find the first { ... } block
+            brace_match = re.search(r"\{.*\}", text, re.DOTALL)
+            if brace_match:
+                try:
+                    data = json.loads(brace_match.group(0))
+                    if isinstance(data, dict):
+                        return LearningPathFetcherResponse.model_validate(data)
+                except (json.JSONDecodeError, Exception):
+                    pass
+
+        return None
+
+    @staticmethod
+    def _extract_learning_paths(response: Any, cert: str) -> list[dict]:
+        """
+        Extract structured learning paths from an agent response object.
 
         Falls back to a minimal placeholder if the structured output is
         missing or invalid so downstream scheduling always receives data.
@@ -399,45 +324,28 @@ class LearningPathFetcherExecutor(Executor):
             cert (str): Certification code for fallback data.
 
         Returns:
-            list[dict]: List of topic objects with learning_paths.
+            list[dict]: List of learning path objects with modules.
         """
-        structured = getattr(response, "value", None)
-        if isinstance(structured, LearningPathFetcherResponse):
-            topics = [topic.model_dump(mode="python") for topic in structured.topics]
-            if topics:
-                return topics
-
-        if isinstance(structured, dict):
-            try:
-                validated = LearningPathFetcherResponse.model_validate(structured)
-                topics = [topic.model_dump(mode="python") for topic in validated.topics]
-                if topics:
-                    return topics
-            except Exception as exc:  # pragma: no cover - defensive fallback
-                logger.warning(
-                    "LearningPathFetcher: invalid structured response (%s) for %s.",
-                    exc,
-                    cert,
-                )
+        parsed = LearningPathFetcherExecutor._parse_response_value(response)
+        if parsed and parsed.learning_paths:
+            return [lp.model_dump(mode="python") for lp in parsed.learning_paths]
 
         logger.warning(
             "LearningPathFetcher: structured output missing; "
-            "returning fallback topics for %s",
+            "returning fallback learning paths for %s",
             cert,
         )
         return [
             {
-                "name": f"{cert} — topics unavailable",
-                "exam_weight_pct": 100,
-                "learning_paths": [
-                    {
-                        "name": f"Search Microsoft Learn for {cert}",
-                        "url": (
-                            f"https://learn.microsoft.com/en-us/certifications/"
-                            f"exams/{cert.lower().replace(' ', '-')}"
-                        ),
-                        "duration_hours": 8.0,
-                    }
-                ],
+                "name": f"Search Microsoft Learn for {cert}",
+                "url": (
+                    f"https://learn.microsoft.com/en-us/certifications/"
+                    f"exams/{cert.lower().replace(' ', '-')}"
+                ),
+                "duration_minutes": 480.0,
+                "module_count": 0,
+                "exam_topic": "",
+                "exam_weight_pct": 0,
+                "modules": [],
             }
         ]
