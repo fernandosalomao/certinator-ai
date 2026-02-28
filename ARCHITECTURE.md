@@ -185,7 +185,7 @@ FastAPI + Uvicorn server with AG-UI endpoint for CopilotKit frontend integration
 - Configures custom orchestrator chain for HITL and state synchronization
 - Registers `RateLimiterMiddleware` and health endpoints
 
-Tracing is configured via OpenTelemetry for the AI Toolkit trace viewer in VS Code.
+Tracing is configured via OpenTelemetry for Aspire Dashboard the AI Toolkit trace viewer in VS Code.
 
 ### 2. Workflow — `src/workflow.py`
 
@@ -669,7 +669,7 @@ flowchart LR
 
 | Layer | Technology | Description |
 |-------|-----------|-------------|
-| **Distributed tracing** | OpenTelemetry (gRPC port 4317) | Sends traces to AI Toolkit trace viewer in VS Code |
+| **Distributed tracing** | OpenTelemetry (gRPC port 4317) | Sends traces to Aspire Dashboard or AI Toolkit trace viewer in VS Code |
 | **Custom metrics** | 11 OTel instruments | Business-semantic metrics (routing, quality, safety, HITL engagement) |
 | **Health endpoints** | `/health` (liveness), `/ready` (readiness) | Checks LLM endpoint, MCP server, and thread store |
 | **Workflow visualization** | `WorkflowViz` | Generates Mermaid diagrams, DiGraph, and SVG exports on build |
@@ -816,7 +816,7 @@ graph TB
     subgraph "Developer Machine"
         FE[Next.js Dev Server<br/>localhost:3000]
         BE[MAF AG-UI Server<br/>localhost:8000]
-        OTEL[AI Toolkit Trace Viewer<br/>gRPC port 4317]
+        OTEL[AI Toolkit Trace Viewer / Aspire Dashboard<br/>gRPC port 4317]
         INSPECTOR[Agent Inspector<br/>VS Code Extension]
     end
 
@@ -870,7 +870,7 @@ flowchart TD
 | Thread store | In-memory dict | Azure Cosmos DB or Redis |
 | Rate limiting | In-memory sliding window | Redis-backed distributed rate limiting |
 | Deployment | Local dev server | Azure Container Apps with managed identity |
-| Observability | AI Toolkit trace viewer | Azure Monitor / Application Insights |
+| Observability | Aspire Dashboard / AI Toolkit trace viewer | Azure Monitor / Application Insights |
 | Secrets | Env vars / `.env` | Azure Key Vault |
 | Frontend | Next.js dev server | Vercel or Azure Static Web Apps |
 

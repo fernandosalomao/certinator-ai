@@ -86,7 +86,7 @@ dev: check-node
 		exit 1; \
 	fi
 	@echo "Starting Certinator AI..."
-	@echo "Backend:  http://localhost:8087"
+	@echo "Backend:  http://localhost:8000"
 	@echo "Frontend: http://localhost:3000"
 	@echo ""
 	@echo "Press Ctrl+C to stop both services"
@@ -106,7 +106,7 @@ backend:
 		echo "⚠️  Missing .env file. Copy .env.sample to .env and configure it."; \
 		exit 1; \
 	fi
-	@echo "Starting backend on http://localhost:8087..."
+	@echo "Starting backend on http://localhost:8000..."
 	@.venv/bin/python src/app.py --agui 2>&1 | tee certinator_server.log
 
 frontend: check-node
