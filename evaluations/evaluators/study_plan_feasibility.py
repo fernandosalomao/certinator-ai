@@ -9,7 +9,7 @@ Assertions checked:
     2. ``total_hours_planned`` <= ``total_hours_available`` * 1.15
        (within the 15 % tolerance used by the scheduler).
     3. ``total_weeks_needed`` <= ``total_weeks`` (from context).
-    4. All expected exam topics appear in ``learning_path_summary``.
+    4. All expected exam skills appear in ``skill_summary``.
     5. Weekly plan hours sum to ``total_hours_planned``.
 
 Scoring (1-5 scale):
@@ -82,7 +82,7 @@ class StudyPlanFeasibilityEvaluator:
             "total_hours_available",
             "total_hours_planned",
             "total_weeks_needed",
-            "learning_path_summary",
+            "skill_summary",
             "weekly_plan",
         }
         missing_keys = required_keys - set(plan.keys())
@@ -91,7 +91,7 @@ class StudyPlanFeasibilityEvaluator:
 
         planned_hours = plan.get("total_hours_planned", 0)
         weeks_needed = plan.get("total_weeks_needed", 0)
-        lp_summary = plan.get("learning_path_summary", [])
+        skill_summary = plan.get("skill_summary", [])
         weekly_plan = plan.get("weekly_plan", [])
 
         # ── 1. Hours within budget (15 % tolerance) ──────────────
@@ -109,19 +109,16 @@ class StudyPlanFeasibilityEvaluator:
                 f"{total_weeks} are available."
             )
 
-        # ── 3. Topic coverage (matches on exam_topic or learning_path) ──
-        summary_topics = set()
-        for lp in lp_summary:
-            exam_topic = lp.get("exam_topic", "").lower()
-            lp_name = lp.get("learning_path", "").lower()
-            if exam_topic:
-                summary_topics.add(exam_topic)
-            if lp_name:
-                summary_topics.add(lp_name)
+        # ── 3. Skill coverage (matches on exam_skill) ──────────────
+        summary_skills = set()
+        for sk in skill_summary:
+            exam_skill = sk.get("exam_skill", "").lower()
+            if exam_skill:
+                summary_skills.add(exam_skill)
         for expected in expected_topics:
             matched = any(
-                expected.lower() in st or st in expected.lower()
-                for st in summary_topics
+                expected.lower() in sk or sk in expected.lower()
+                for sk in summary_skills
             )
             if not matched:
                 violations.append(

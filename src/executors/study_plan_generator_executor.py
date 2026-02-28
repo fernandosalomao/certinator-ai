@@ -244,8 +244,8 @@ class StudyPlanGeneratorExecutor(Executor):
             f"```json\n{schedule_pretty}\n```\n\n"
             "Convert this schedule to a student-friendly Markdown response. "
             "Do NOT return JSON. "
-            "Include: summary, week-by-week plan grouped by learning path, "
-            "learning path coverage table, skipped modules (if any), "
+            "Include: summary, week-by-week plan grouped by exam skill, "
+            "skill coverage table, skipped modules (if any), "
             "scheduler notes, and exam tips."
         )
         plan_messages = [ChatMessage(role=Role.USER, text=prompt)]
@@ -292,7 +292,7 @@ class StudyPlanGeneratorExecutor(Executor):
             pass
         return {
             "weekly_plan": [],
-            "learning_path_summary": [],
+            "skill_summary": [],
             "skipped_modules": [],
             "notes": [],
         }
@@ -379,17 +379,19 @@ class StudyPlanGeneratorExecutor(Executor):
             week_hours = week.get("hours", 0)
             lines.append(f"## Week {week_num} ({week_hours}h)")
 
-            # Group items by learning path
-            current_lp = None
+            # Group items by exam skill
+            current_skill = None
             for item in week.get("items", []):
-                lp_name = item.get("learning_path", "")
+                skill_name = item.get("exam_skill", "")
+                weight = item.get("exam_weight_pct", 0)
                 mod_name = item.get("module", "Module")
                 url = item.get("url", "")
                 item_hours = item.get("hours", 0)
 
-                if lp_name != current_lp:
-                    lines.append(f"\n**{lp_name}**")
-                    current_lp = lp_name
+                if skill_name != current_skill:
+                    weight_str = f" ({weight}%)" if weight else ""
+                    lines.append(f"\n**{skill_name}{weight_str}**")
+                    current_skill = skill_name
 
                 if url:
                     lines.append(f"- [{mod_name}]({url}) — {item_hours}h")
@@ -397,28 +399,26 @@ class StudyPlanGeneratorExecutor(Executor):
                     lines.append(f"- {mod_name} — {item_hours}h")
             lines.append("")
 
-        # Learning path coverage summary
-        lp_summary = schedule_data.get("learning_path_summary", [])
-        if lp_summary:
-            lines.append("## Learning Path Coverage")
+        # Exam skill coverage summary
+        skill_summary = schedule_data.get("skill_summary", [])
+        if skill_summary:
+            lines.append("## Exam Skill Coverage")
             lines.append(
-                "| Exam Topic | Weight | Learning Path | Total Time | "
+                "| Exam Skill | Weight | Total Time | "
                 "Modules Included | Modules Skipped |"
             )
-            lines.append("|---|---:|---|---:|---:|---:|")
-            for lp in lp_summary:
-                total_min = lp.get("total_minutes", 0)
+            lines.append("|---|---:|---:|---:|---:|")
+            for sk in skill_summary:
+                total_min = sk.get("total_minutes", 0)
                 hours_str = f"{round(total_min / 60, 1)}h"
-                exam_topic = lp.get("exam_topic", "")
-                weight = lp.get("exam_weight_pct", 0)
+                weight = sk.get("exam_weight_pct", 0)
                 weight_str = f"{weight}%" if weight else "—"
                 lines.append(
-                    f"| {exam_topic or '—'} | "
+                    f"| {sk.get('exam_skill', 'N/A')} | "
                     f"{weight_str} | "
-                    f"{lp.get('learning_path', 'N/A')} | "
                     f"{hours_str} | "
-                    f"{lp.get('modules_included', 0)} | "
-                    f"{lp.get('modules_skipped', 0)} |"
+                    f"{sk.get('modules_included', 0)} | "
+                    f"{sk.get('modules_skipped', 0)} |"
                 )
             lines.append("")
 
@@ -430,12 +430,12 @@ class StudyPlanGeneratorExecutor(Executor):
             for mod in skipped:
                 url = mod.get("url", "")
                 name = mod.get("module", "Module")
-                lp = mod.get("learning_path", "")
+                skill = mod.get("exam_skill", "")
                 dur = round(mod.get("duration_minutes", 0) / 60, 2)
                 if url:
-                    lines.append(f"- **{lp}**: [{name}]({url}) — {dur}h")
+                    lines.append(f"- **{skill}**: [{name}]({url}) — {dur}h")
                 else:
-                    lines.append(f"- **{lp}**: {name} — {dur}h")
+                    lines.append(f"- **{skill}**: {name} — {dur}h")
             lines.append("")
 
         notes = schedule_data.get("notes", [])

@@ -143,10 +143,9 @@ class TestStudyPlanFeasibilityEvaluator:
             "total_hours_available": 80.0,
             "total_hours_planned": 72.0,
             "total_weeks_needed": 8,
-            "learning_path_summary": [
+            "skill_summary": [
                 {
-                    "learning_path": "LP Alpha",
-                    "exam_topic": "Topic A",
+                    "exam_skill": "Topic A",
                     "exam_weight_pct": 50,
                     "total_minutes": 2160,
                     "modules_included": 6,
@@ -154,8 +153,7 @@ class TestStudyPlanFeasibilityEvaluator:
                     "selected_minutes": 2160,
                 },
                 {
-                    "learning_path": "LP Beta",
-                    "exam_topic": "Topic B",
+                    "exam_skill": "Topic B",
                     "exam_weight_pct": 50,
                     "total_minutes": 2160,
                     "modules_included": 6,
@@ -186,7 +184,7 @@ class TestStudyPlanFeasibilityEvaluator:
             "total_hours_available": 30.0,
             "total_hours_planned": 60.0,
             "total_weeks_needed": 3,
-            "learning_path_summary": [],
+            "skill_summary": [],
             "weekly_plan": [
                 {"week": 1, "hours": 20.0, "items": []},
                 {"week": 2, "hours": 20.0, "items": []},
@@ -210,7 +208,7 @@ class TestStudyPlanFeasibilityEvaluator:
             "total_hours_available": 30.0,
             "total_hours_planned": 30.0,
             "total_weeks_needed": 6,
-            "learning_path_summary": [],
+            "skill_summary": [],
             "weekly_plan": [
                 {"week": i, "hours": 5.0, "items": []} for i in range(1, 7)
             ],
@@ -237,10 +235,9 @@ class TestStudyPlanFeasibilityEvaluator:
             "total_hours_available": 40.0,
             "total_hours_planned": 30.0,
             "total_weeks_needed": 3,
-            "learning_path_summary": [
+            "skill_summary": [
                 {
-                    "learning_path": "LP Alpha",
-                    "exam_topic": "Topic A",
+                    "exam_skill": "Topic A",
                     "exam_weight_pct": 100,
                     "total_minutes": 1800,
                     "modules_included": 5,

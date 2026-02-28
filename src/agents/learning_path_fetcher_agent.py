@@ -69,7 +69,40 @@ Set `exam_skill` and `exam_weight_pct` on every module.
 - If no clear mapping exists, assign to the closest matching skill.
 
 ## Output Contract
-Return data matching the configured structured response schema.
+Return a single JSON object with EXACTLY these field names:
+
+```json
+{
+  "examCode": "<EXAM_CODE>",
+  "skillsAtAGlance": [
+    {
+      "skill_name": "<exact skill name from Step 1>",
+      "exam_weight_pct": <midpoint number>
+    }
+  ],
+  "learningPaths": [
+    {
+      "title": "<learning path title>",
+      "url": "<learning path URL>",
+      "duration_minutes": <number>,
+      "module_count": <number>,
+      "modules": [
+        {
+          "title": "<module title>",
+          "url": "<module URL>",
+          "duration_minutes": <number>,
+          "unit_count": <number>,
+          "exam_skill": "<exact skill name from Step 1>",
+          "exam_weight_pct": <midpoint number>
+        }
+      ]
+    }
+  ]
+}
+```
+
+**IMPORTANT**: Use `skillsAtAGlance` (NOT `skills`), and \
+`skill_name` (NOT `name`) inside each skill object.
 
 ## Accuracy Rules
 - Every URL MUST start with https://learn.microsoft.com.

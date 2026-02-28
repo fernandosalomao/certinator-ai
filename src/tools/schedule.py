@@ -26,7 +26,7 @@ from agent_framework import ai_function
         "Compute a week-by-week study schedule given a list of learning "
         "paths (each with modules and their durations in minutes) and the "
         "student's available hours. Returns a JSON object with the full "
-        "plan, coverage stats, and notes."
+        "plan organised by exam skill, coverage stats, and notes."
     ),
 )
 def schedule_study_plan(
@@ -34,13 +34,15 @@ def schedule_study_plan(
         str,
         (
             "JSON array of learning path objects. Each object must have: "
-            "name (str), url (str), duration_minutes (number), "
+            "title (str), url (str), duration_minutes (number), "
             "module_count (int), modules (array of "
-            "{name: str, url: str, duration_minutes: number, unit_count: int}). "
+            "{title: str, url: str, duration_minutes: number, "
+            "unit_count: int, exam_skill: str, exam_weight_pct: number}). "
             "Example: "
-            '[{"name":"AZ-104: Prerequisites","url":"https://...","duration_minutes":63,'
-            '"module_count":2,"modules":[{"name":"Intro to Cloud Shell",'
-            '"url":"https://...","duration_minutes":20,"unit_count":6}]}]'
+            '[{"title":"AZ-104: Prerequisites","url":"https://...","duration_minutes":63,'
+            '"module_count":2,"modules":[{"title":"Intro to Cloud Shell",'
+            '"url":"https://...","duration_minutes":20,"unit_count":6,'
+            '"exam_skill":"Manage identities","exam_weight_pct":17.5}]}]'
         ),
     ],
     hours_per_week: Annotated[
@@ -94,22 +96,20 @@ def schedule_study_plan(
     path_summaries: list[dict] = []
 
     for lp in paths_list:
-        lp_name = lp.get("name", "")
+        lp_title = lp.get("title", "")
         lp_url = lp.get("url", "")
         modules = lp.get("modules", [])
         lp_duration_minutes = lp.get("duration_minutes", 0)
-        lp_exam_topic = lp.get("exam_topic", "")
-        lp_exam_weight_pct = lp.get("exam_weight_pct", 0)
 
         if modules:
             for mod in modules:
                 all_modules.append(
                     {
-                        "learning_path": lp_name,
+                        "learning_path": lp_title,
                         "learning_path_url": lp_url,
-                        "exam_topic": lp_exam_topic,
-                        "exam_weight_pct": lp_exam_weight_pct,
-                        "module": mod.get("name", ""),
+                        "exam_skill": mod.get("exam_skill", ""),
+                        "exam_weight_pct": mod.get("exam_weight_pct", 0),
+                        "module": mod.get("title", ""),
                         "url": mod.get("url", ""),
                         "duration_minutes": mod.get("duration_minutes", 30.0),
                         "unit_count": mod.get("unit_count", 0),
@@ -120,11 +120,11 @@ def schedule_study_plan(
             # path as a single schedulable item.
             all_modules.append(
                 {
-                    "learning_path": lp_name,
+                    "learning_path": lp_title,
                     "learning_path_url": lp_url,
-                    "exam_topic": lp_exam_topic,
-                    "exam_weight_pct": lp_exam_weight_pct,
-                    "module": lp_name,
+                    "exam_skill": "",
+                    "exam_weight_pct": 0,
+                    "module": lp_title,
                     "url": lp_url,
                     "duration_minutes": lp_duration_minutes or 60.0,
                     "unit_count": 0,
@@ -133,12 +133,10 @@ def schedule_study_plan(
 
         path_summaries.append(
             {
-                "learning_path": lp_name,
+                "learning_path": lp_title,
                 "url": lp_url,
                 "duration_minutes": lp_duration_minutes,
                 "module_count": len(modules),
-                "exam_topic": lp_exam_topic,
-                "exam_weight_pct": lp_exam_weight_pct,
             }
         )
 
@@ -178,13 +176,13 @@ def schedule_study_plan(
             week_items = []
         week_items.append(
             {
-                "learning_path": mod["learning_path"],
-                "exam_topic": mod["exam_topic"],
-                "exam_weight_pct": mod["exam_weight_pct"],
                 "module": mod["module"],
                 "url": mod["url"],
                 "duration_minutes": mod_minutes,
                 "hours": round(mod_minutes / 60, 2),
+                "exam_skill": mod["exam_skill"],
+                "exam_weight_pct": mod["exam_weight_pct"],
+                "learning_path": mod["learning_path"],
             }
         )
         week_minutes += mod_minutes
@@ -208,26 +206,41 @@ def schedule_study_plan(
         ),
     )
 
-    # ── Step 4: build learning path summary ──────────────────────────
-    lp_stats: list[dict] = []
-    for ps in path_summaries:
-        lp_name = ps["learning_path"]
-        selected_for_lp = [m for m in selected if m["learning_path"] == lp_name]
-        skipped_for_lp = [m for m in skipped if m["learning_path"] == lp_name]
-        lp_stats.append(
-            {
-                "learning_path": lp_name,
-                "url": ps["url"],
-                "total_minutes": ps["duration_minutes"],
-                "exam_topic": ps.get("exam_topic", ""),
-                "exam_weight_pct": ps.get("exam_weight_pct", 0),
-                "modules_included": len(selected_for_lp),
-                "modules_skipped": len(skipped_for_lp),
-                "selected_minutes": round(
-                    sum(m["duration_minutes"] for m in selected_for_lp), 1
-                ),
+    # ── Step 4: build exam skill summary ──────────────────────────────
+    # Group modules by exam_skill for a skill-centric coverage view.
+    skill_names_seen: list[str] = []
+    skill_stats: dict[str, dict] = {}
+    for mod in all_modules:
+        skill = mod["exam_skill"] or "Uncategorised"
+        if skill not in skill_stats:
+            skill_names_seen.append(skill)
+            skill_stats[skill] = {
+                "exam_skill": skill,
+                "exam_weight_pct": mod["exam_weight_pct"],
+                "total_minutes": 0.0,
+                "modules_included": 0,
+                "modules_skipped": 0,
+                "selected_minutes": 0.0,
             }
-        )
+        skill_stats[skill]["total_minutes"] += mod["duration_minutes"]
+
+    for mod in selected:
+        skill = mod["exam_skill"] or "Uncategorised"
+        if skill in skill_stats:
+            skill_stats[skill]["modules_included"] += 1
+            skill_stats[skill]["selected_minutes"] += mod["duration_minutes"]
+
+    for mod in skipped:
+        skill = mod["exam_skill"] or "Uncategorised"
+        if skill in skill_stats:
+            skill_stats[skill]["modules_skipped"] += 1
+
+    # Round selected_minutes for each skill.
+    for stats in skill_stats.values():
+        stats["selected_minutes"] = round(stats["selected_minutes"], 1)
+        stats["total_minutes"] = round(stats["total_minutes"], 1)
+
+    skill_summary = [skill_stats[s] for s in skill_names_seen]
 
     # ── Step 5: notes ────────────────────────────────────────────────
     notes: list[str] = []
@@ -260,14 +273,16 @@ def schedule_study_plan(
             "total_hours_planned": total_planned_hours,
             "total_weeks_needed": weeks_needed,
             "coverage_pct": coverage_pct,
-            "learning_path_summary": lp_stats,
+            "skill_summary": skill_summary,
             "weekly_plan": weekly_plan,
             "skipped_modules": [
                 {
-                    "learning_path": m["learning_path"],
                     "module": m["module"],
                     "url": m["url"],
                     "duration_minutes": m["duration_minutes"],
+                    "exam_skill": m["exam_skill"],
+                    "exam_weight_pct": m["exam_weight_pct"],
+                    "learning_path": m["learning_path"],
                 }
                 for m in skipped
             ],

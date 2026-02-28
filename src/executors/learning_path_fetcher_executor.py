@@ -28,7 +28,12 @@ from agent_framework import (
 )
 
 import metrics
-from executors import emit_response, safe_agent_run, update_workflow_progress
+from executors import (
+    emit_response,
+    extract_response_text,
+    safe_agent_run,
+    update_workflow_progress,
+)
 from executors.models import (
     LearningPathFetcherResponse,
     LearningPathsData,
@@ -105,7 +110,9 @@ class LearningPathFetcherExecutor(Executor):
         if response is None:
             return
 
-        learning_paths = self._extract_learning_paths(response, cert)
+        learning_paths, skills_at_a_glance = self._extract_learning_paths(
+            response, cert
+        )
 
         logger.info(
             "LearningPathFetcher: found %d learning paths for %s",
@@ -116,6 +123,7 @@ class LearningPathFetcherExecutor(Executor):
         await ctx.send_message(
             LearningPathsData(
                 certification=cert,
+                skills_at_a_glance=skills_at_a_glance,
                 learning_paths=learning_paths,
                 original_decision=decision,
             )
@@ -169,7 +177,9 @@ class LearningPathFetcherExecutor(Executor):
         if response is None:
             return
 
-        learning_paths = self._extract_learning_paths(response, cert)
+        learning_paths, skills_at_a_glance = self._extract_learning_paths(
+            response, cert
+        )
 
         logger.info(
             "LearningPathFetcher: found %d learning paths for post-quiz study plan (%s)",
@@ -179,6 +189,7 @@ class LearningPathFetcherExecutor(Executor):
         await ctx.send_message(
             LearningPathsData(
                 certification=cert,
+                skills_at_a_glance=skills_at_a_glance,
                 learning_paths=learning_paths,
                 original_decision=request.original_decision,
             )
@@ -241,6 +252,39 @@ class LearningPathFetcherExecutor(Executor):
             return None
 
     @staticmethod
+    def _normalize_llm_keys(data: dict) -> dict:
+        """Normalise common LLM key variations to the canonical schema.
+
+        The LLM sometimes uses shorter or different key names than the
+        Pydantic model expects.  This method maps common variants so
+        ``model_validate`` succeeds.
+
+        Known variations handled:
+        - ``skills`` → ``skillsAtAGlance`` (top-level skills list)
+        - ``name`` → ``skill_name`` inside skill items
+        """
+        # Top-level: "skills" → "skillsAtAGlance"
+        if (
+            "skills" in data
+            and "skillsAtAGlance" not in data
+            and "skills_at_a_glance" not in data
+        ):
+            data["skillsAtAGlance"] = data.pop("skills")
+
+        # Skill items: "name" → "skill_name"
+        for key in ("skillsAtAGlance", "skills_at_a_glance"):
+            if key in data and isinstance(data[key], list):
+                for item in data[key]:
+                    if (
+                        isinstance(item, dict)
+                        and "name" in item
+                        and "skill_name" not in item
+                    ):
+                        item["skill_name"] = item.pop("name")
+
+        return data
+
+    @staticmethod
     def _parse_response_value(response: Any) -> LearningPathFetcherResponse | None:
         """Parse the agent response into a LearningPathFetcherResponse.
 
@@ -263,7 +307,8 @@ class LearningPathFetcherExecutor(Executor):
         # Case 2: dict
         if isinstance(structured, dict):
             try:
-                return LearningPathFetcherResponse.model_validate(structured)
+                normalised = LearningPathFetcherExecutor._normalize_llm_keys(structured)
+                return LearningPathFetcherResponse.model_validate(normalised)
             except Exception:
                 pass
 
@@ -275,13 +320,21 @@ class LearningPathFetcherExecutor(Executor):
         elif hasattr(response, "value") and isinstance(response.value, str):
             text = response.value
 
+        # Case 4: response.value is None (agent ran without
+        # response_format) — the actual text lives in
+        # response.messages.  Use extract_response_text() to pull
+        # the latest assistant text from the message chain.
+        if text is None:
+            text = extract_response_text(response) or None
+
         if text:
             # Try to find a JSON object in the text
             # First try: raw JSON parse
             try:
                 data = json.loads(text)
                 if isinstance(data, dict):
-                    return LearningPathFetcherResponse.model_validate(data)
+                    normalised = LearningPathFetcherExecutor._normalize_llm_keys(data)
+                    return LearningPathFetcherResponse.model_validate(normalised)
             except (json.JSONDecodeError, Exception):
                 pass
 
@@ -295,7 +348,10 @@ class LearningPathFetcherExecutor(Executor):
                 try:
                     data = json.loads(json_match.group(1))
                     if isinstance(data, dict):
-                        return LearningPathFetcherResponse.model_validate(data)
+                        normalised = LearningPathFetcherExecutor._normalize_llm_keys(
+                            data
+                        )
+                        return LearningPathFetcherResponse.model_validate(normalised)
                 except (json.JSONDecodeError, Exception):
                     pass
 
@@ -305,14 +361,19 @@ class LearningPathFetcherExecutor(Executor):
                 try:
                     data = json.loads(brace_match.group(0))
                     if isinstance(data, dict):
-                        return LearningPathFetcherResponse.model_validate(data)
+                        normalised = LearningPathFetcherExecutor._normalize_llm_keys(
+                            data
+                        )
+                        return LearningPathFetcherResponse.model_validate(normalised)
                 except (json.JSONDecodeError, Exception):
                     pass
 
         return None
 
     @staticmethod
-    def _extract_learning_paths(response: Any, cert: str) -> list[dict]:
+    def _extract_learning_paths(
+        response: Any, cert: str
+    ) -> tuple[list[dict], list[dict]]:
         """
         Extract structured learning paths from an agent response object.
 
@@ -324,11 +385,13 @@ class LearningPathFetcherExecutor(Executor):
             cert (str): Certification code for fallback data.
 
         Returns:
-            list[dict]: List of learning path objects with modules.
+            tuple[list[dict], list[dict]]: (learning_paths, skills_at_a_glance).
         """
         parsed = LearningPathFetcherExecutor._parse_response_value(response)
         if parsed and parsed.learning_paths:
-            return [lp.model_dump(mode="python") for lp in parsed.learning_paths]
+            lps = [lp.model_dump(mode="python") for lp in parsed.learning_paths]
+            skills = [sk.model_dump(mode="python") for sk in parsed.skills_at_a_glance]
+            return lps, skills
 
         logger.warning(
             "LearningPathFetcher: structured output missing; "
@@ -337,15 +400,13 @@ class LearningPathFetcherExecutor(Executor):
         )
         return [
             {
-                "name": f"Search Microsoft Learn for {cert}",
+                "title": f"Search Microsoft Learn for {cert}",
                 "url": (
                     f"https://learn.microsoft.com/en-us/certifications/"
                     f"exams/{cert.lower().replace(' ', '-')}"
                 ),
                 "duration_minutes": 480.0,
                 "module_count": 0,
-                "exam_topic": "",
-                "exam_weight_pct": 0,
                 "modules": [],
             }
-        ]
+        ], []

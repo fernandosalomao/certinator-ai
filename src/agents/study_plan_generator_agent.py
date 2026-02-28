@@ -30,8 +30,9 @@ Each prompt contains:
     "total_hours_planned": <float>,
     "total_weeks_needed": <int>,
     "coverage_pct": <int>,
-    "learning_path_summary": [
-      { "learning_path": str, "url": str, "total_minutes": float,
+    "skill_summary": [
+      { "exam_skill": str, "exam_weight_pct": float,
+        "total_minutes": float,
         "modules_included": int, "modules_skipped": int,
         "selected_minutes": float }
     ],
@@ -39,14 +40,18 @@ Each prompt contains:
       {
         "week": <int>, "hours": <float>,
         "items": [
-          { "learning_path": str, "module": str,
-            "url": str, "duration_minutes": float, "hours": float }
+          { "module": str, "url": str,
+            "duration_minutes": float, "hours": float,
+            "exam_skill": str, "exam_weight_pct": float,
+            "learning_path": str }
         ]
       }
     ],
     "skipped_modules": [
-      { "learning_path": str, "module": str,
-        "url": str, "duration_minutes": float }
+      { "module": str, "url": str,
+        "duration_minutes": float,
+        "exam_skill": str, "exam_weight_pct": float,
+        "learning_path": str }
     ],
     "notes": [ <str>, ... ]
   }
@@ -64,23 +69,23 @@ Then a bullet list:
 
 ### 2. Week-by-Week Schedule
 One `## Week N (Xh)` section per week. Under each week, list items \
-grouped by learning path:
+grouped by **exam skill** (NOT by learning path):
 
 ```
-**<Learning Path Name>**
+**<Exam Skill Name> (<weight>%)**
 - [<Module Name>](<url>) — <hours>h
 - [<Module Name>](<url>) — <hours>h
 ```
 
-### 3. Learning Path Coverage
+### 3. Exam Skill Coverage
 Markdown table:
 
-| Learning Path | Total Time | Included | Skipped |
-|---|---:|---:|---:|
+| Exam Skill | Weight | Total Time | Included | Skipped |
+|---|---:|---:|---:|---:|
 
 ### 4. Skipped Modules
 Only include when `skipped_modules` is non-empty. List each with its \
-learning path and a note:
+exam skill and a note:
 *"These modules are recommended if time allows."*
 
 ### 5. Scheduler Notes

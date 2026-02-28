@@ -933,25 +933,25 @@ class PracticeQuestionsExecutor(Executor):
         if not paths:
             return []
 
-        # Check if exam weights are available (any path has exam_weight_pct > 0)
-        has_exam_weights = any(lp.exam_weight_pct > 0 for lp in paths)
+        # Collect exam skills from modules (skill info is at module level).
+        skill_weights: dict[str, float] = {}
+        for lp in paths:
+            for mod in lp.modules:
+                skill = mod.exam_skill
+                if skill and skill not in skill_weights:
+                    skill_weights[skill] = mod.exam_weight_pct
 
-        if has_exam_weights:
-            # Group by exam_topic to avoid duplicates when multiple
-            # learning paths share the same exam topic.
-            topic_weights: dict[str, float] = {}
-            for lp in paths:
-                topic = lp.exam_topic or lp.name
-                if topic not in topic_weights:
-                    topic_weights[topic] = lp.exam_weight_pct
+        has_exam_weights = any(w > 0 for w in skill_weights.values())
+
+        if has_exam_weights and skill_weights:
             # Normalise so weights sum to 100
-            total_weight = sum(topic_weights.values()) or 1
+            total_weight = sum(skill_weights.values()) or 1
             return [
                 {
-                    "name": topic,
+                    "name": skill,
                     "weight_pct": max(round(weight / total_weight * 100), 1),
                 }
-                for topic, weight in topic_weights.items()
+                for skill, weight in skill_weights.items()
             ]
 
         # Fallback: derive weights from durations
@@ -964,7 +964,7 @@ class PracticeQuestionsExecutor(Executor):
             else:
                 pct = round(lp.duration_minutes / total_minutes * 100)
                 cumulative += pct
-            result.append({"name": lp.name, "weight_pct": max(pct, 1)})
+            result.append({"name": lp.title, "weight_pct": max(pct, 1)})
         return result
 
     @staticmethod
