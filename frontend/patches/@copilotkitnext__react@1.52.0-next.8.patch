@@ -1,0 +1,128 @@
+diff --git a/dist/components/chat/CopilotChatMessageView.cjs b/dist/components/chat/CopilotChatMessageView.cjs
+index 54cd3f6e9dd9e886c37caf633f3c237faae780f3..2873a42cbb9619ab599b5aeb017461ca86eb20ae 100644
+--- a/dist/components/chat/CopilotChatMessageView.cjs
++++ b/dist/components/chat/CopilotChatMessageView.cjs
+@@ -143,7 +143,7 @@ function CopilotChatMessageView({ messages = [], assistantMessage, userMessage,
+ 		if (!resolvedRunId) return void 0;
+ 		return copilotkit.getStateByRun(config.agentId, config.threadId, resolvedRunId);
+ 	};
+-	const messageElements = messages.flatMap((message) => {
++	const messageElements = messages.flatMap((message, _ck) => {
+ 		const elements = [];
+ 		const stateSnapshot = getStateSnapshotForMessage(message.id);
+ 		if (renderCustomMessage) elements.push(/* @__PURE__ */ (0, react_jsx_runtime.jsx)(MemoizedCustomMessage, {
+@@ -151,7 +151,7 @@ function CopilotChatMessageView({ messages = [], assistantMessage, userMessage,
+ 			position: "before",
+ 			renderCustomMessage,
+ 			stateSnapshot
+-		}, `${message.id}-custom-before`));
++		}, `${message.id}-${_ck}-custom-before`));
+ 		if (message.role === "assistant") {
+ 			let AssistantComponent = require_CopilotChatAssistantMessage.default;
+ 			let assistantSlotProps;
+@@ -164,7 +164,7 @@ function CopilotChatMessageView({ messages = [], assistantMessage, userMessage,
+ 				isRunning,
+ 				AssistantMessageComponent: AssistantComponent,
+ 				slotProps: assistantSlotProps
+-			}, message.id));
++		}, `${message.id}-${_ck}`));
+ 		} else if (message.role === "user") {
+ 			let UserComponent = require_CopilotChatUserMessage.default;
+ 			let userSlotProps;
+@@ -175,13 +175,13 @@ function CopilotChatMessageView({ messages = [], assistantMessage, userMessage,
+ 				message,
+ 				UserMessageComponent: UserComponent,
+ 				slotProps: userSlotProps
+-			}, message.id));
++		}, `${message.id}-${_ck}`));
+ 		} else if (message.role === "activity") {
+ 			const activityMsg = message;
+ 			elements.push(/* @__PURE__ */ (0, react_jsx_runtime.jsx)(MemoizedActivityMessage, {
+ 				message: activityMsg,
+ 				renderActivityMessage
+-			}, message.id));
++		}, `${message.id}-${_ck}`));
+ 		} else if (message.role === "reasoning") {
+ 			let ReasoningComponent = require_CopilotChatReasoningMessage.default;
+ 			let reasoningSlotProps;
+@@ -194,14 +194,14 @@ function CopilotChatMessageView({ messages = [], assistantMessage, userMessage,
+ 				isRunning,
+ 				ReasoningMessageComponent: ReasoningComponent,
+ 				slotProps: reasoningSlotProps
+-			}, message.id));
++		}, `${message.id}-${_ck}`));
+ 		}
+ 		if (renderCustomMessage) elements.push(/* @__PURE__ */ (0, react_jsx_runtime.jsx)(MemoizedCustomMessage, {
+ 			message,
+ 			position: "after",
+ 			renderCustomMessage,
+ 			stateSnapshot
+-		}, `${message.id}-custom-after`));
++		}, `${message.id}-${_ck}-custom-after`));
+ 		return elements;
+ 	}).filter(Boolean);
+ 	if (children) return /* @__PURE__ */ (0, react_jsx_runtime.jsx)("div", {
+diff --git a/dist/components/chat/CopilotChatMessageView.mjs b/dist/components/chat/CopilotChatMessageView.mjs
+index 43683e46979b3a149dd36e03e044fd3d56d1629d..81b665d0369be27189e3fdceb39a96b0f95eaadc 100644
+--- a/dist/components/chat/CopilotChatMessageView.mjs
++++ b/dist/components/chat/CopilotChatMessageView.mjs
+@@ -141,7 +141,7 @@ function CopilotChatMessageView({ messages = [], assistantMessage, userMessage,
+ 		if (!resolvedRunId) return void 0;
+ 		return copilotkit.getStateByRun(config.agentId, config.threadId, resolvedRunId);
+ 	};
+-	const messageElements = messages.flatMap((message) => {
++	const messageElements = messages.flatMap((message, _ck) => {
+ 		const elements = [];
+ 		const stateSnapshot = getStateSnapshotForMessage(message.id);
+ 		if (renderCustomMessage) elements.push(/* @__PURE__ */ jsx(MemoizedCustomMessage, {
+@@ -149,7 +149,7 @@ function CopilotChatMessageView({ messages = [], assistantMessage, userMessage,
+ 			position: "before",
+ 			renderCustomMessage,
+ 			stateSnapshot
+-		}, `${message.id}-custom-before`));
++		}, `${message.id}-${_ck}-custom-before`));
+ 		if (message.role === "assistant") {
+ 			let AssistantComponent = CopilotChatAssistantMessage_default;
+ 			let assistantSlotProps;
+@@ -162,7 +162,7 @@ function CopilotChatMessageView({ messages = [], assistantMessage, userMessage,
+ 				isRunning,
+ 				AssistantMessageComponent: AssistantComponent,
+ 				slotProps: assistantSlotProps
+-			}, message.id));
++		}, `${message.id}-${_ck}`));
+ 		} else if (message.role === "user") {
+ 			let UserComponent = CopilotChatUserMessage_default;
+ 			let userSlotProps;
+@@ -173,13 +173,13 @@ function CopilotChatMessageView({ messages = [], assistantMessage, userMessage,
+ 				message,
+ 				UserMessageComponent: UserComponent,
+ 				slotProps: userSlotProps
+-			}, message.id));
++		}, `${message.id}-${_ck}`));
+ 		} else if (message.role === "activity") {
+ 			const activityMsg = message;
+ 			elements.push(/* @__PURE__ */ jsx(MemoizedActivityMessage, {
+ 				message: activityMsg,
+ 				renderActivityMessage
+-			}, message.id));
++		}, `${message.id}-${_ck}`));
+ 		} else if (message.role === "reasoning") {
+ 			let ReasoningComponent = CopilotChatReasoningMessage_default;
+ 			let reasoningSlotProps;
+@@ -192,14 +192,14 @@ function CopilotChatMessageView({ messages = [], assistantMessage, userMessage,
+ 				isRunning,
+ 				ReasoningMessageComponent: ReasoningComponent,
+ 				slotProps: reasoningSlotProps
+-			}, message.id));
++		}, `${message.id}-${_ck}`));
+ 		}
+ 		if (renderCustomMessage) elements.push(/* @__PURE__ */ jsx(MemoizedCustomMessage, {
+ 			message,
+ 			position: "after",
+ 			renderCustomMessage,
+ 			stateSnapshot
+-		}, `${message.id}-custom-after`));
++		}, `${message.id}-${_ck}-custom-after`));
+ 		return elements;
+ 	}).filter(Boolean);
+ 	if (children) return /* @__PURE__ */ jsx("div", {

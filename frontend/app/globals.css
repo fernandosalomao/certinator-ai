@@ -1,0 +1,1225 @@
+@import "tailwindcss";
+
+/* ===================================================================
+   Screen-reader-only utility — visually hidden, accessible to AT
+   =================================================================== */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border-width: 0;
+}
+
+:root {
+  --background: #060914;
+  --foreground: #e7ecff;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  background:
+    radial-gradient(1200px 700px at 15% 0%, #2e2f7a33, transparent 60%),
+    radial-gradient(1000px 600px at 100% 10%, #00b7ff2b, transparent 55%),
+    linear-gradient(180deg, #060914 0%, #090f1f 45%, #060a13 100%);
+  color: var(--foreground);
+  font-family: var(--font-geist-sans), Arial, Helvetica, sans-serif;
+  height: 100vh;
+  overflow: hidden;
+}
+
+.app-shell {
+  height: 100vh;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.hero-panel {
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background:
+    linear-gradient(145deg, rgba(34, 47, 108, 0.55), rgba(8, 14, 32, 0.75)),
+    radial-gradient(circle at 20% 20%, rgba(129, 140, 248, 0.25), transparent 38%);
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.04) inset,
+    0 24px 70px rgba(3, 8, 27, 0.45);
+}
+
+.glass-card {
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: linear-gradient(160deg, rgba(255, 255, 255, 0.09), rgba(255, 255, 255, 0.03));
+  backdrop-filter: blur(8px);
+}
+
+/* ===================================================================
+   Hero collapse toggle (D1 — fixed-height chat)
+   =================================================================== */
+.hero-collapse-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.3rem 0.75rem;
+  border-radius: 9999px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.04);
+  color: rgba(255, 255, 255, 0.55);
+  font-size: 0.75rem;
+  cursor: pointer;
+  transition: color 0.2s, border-color 0.2s, background 0.2s;
+}
+
+.hero-collapse-toggle:hover {
+  color: rgba(255, 255, 255, 0.85);
+  border-color: rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.hero-collapse-toggle:focus-visible {
+  outline: 2px solid #6f87ff;
+  outline-offset: 2px;
+}
+
+.hero-collapse-toggle__chevron {
+  transition: transform 0.3s ease;
+}
+
+.hero-collapse-toggle__chevron--collapsed {
+  transform: rotate(180deg);
+}
+
+.surface-card {
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: linear-gradient(155deg, rgba(15, 22, 44, 0.95), rgba(10, 16, 33, 0.95));
+  box-shadow: 0 16px 45px rgba(2, 8, 26, 0.5);
+}
+
+/* ===================================================================
+   CopilotKit v2 theme — navy dark palette
+
+   NOTE ON SPECIFICITY (V3 fix):
+   CopilotKit v2 CSS lives entirely inside @layer (properties, theme,
+   base, utilities). Un-layered CSS always wins the cascade over
+   layered CSS regardless of selector specificity. This means none of
+   our overrides need !important — standard selectors suffice.
+
+   Core CopilotKit colours are set via the CSS-variable API on the
+   provider wrapper div (see CopilotKitProvider.tsx). The variables
+   below fine-tune the internal HSL-based tokens that the v2 kit uses
+   for cards, popovers, rings, etc.
+   =================================================================== */
+[data-copilotkit] {
+  --radius: 0.75rem;
+}
+
+.dark [data-copilotkit] {
+  --background: #0d1630;
+  --foreground: #e8eeff;
+  --card: #111a36;
+  --card-foreground: #e8eeff;
+  --popover: #0d1630;
+  --popover-foreground: #e8eeff;
+  --primary: #6f87ff;
+  --primary-foreground: #ffffff;
+  --secondary: #111a36;
+  --secondary-foreground: #e8eeff;
+  --muted: #152040;
+  --muted-foreground: #9cadde;
+  --accent: #1d2a52;
+  --accent-foreground: #e8eeff;
+  --destructive: #ff4d4d;
+  --destructive-foreground: #ffffff;
+  --border: #2a355e;
+  --input: #111a36;
+  --ring: #6f87ff;
+
+  /* Make the root [data-copilotkit] element transparent so the hero-panel
+     gradient shows through. The --copilot-kit-background-color CSS
+     variable (set on the provider wrapper) handles this too, but we
+     keep an explicit declaration as a cascade-level fallback. */
+  background-color: transparent;
+}
+
+/* ── Custom scrollbar — blend into the dark theme ────────────────────── */
+[data-copilotkit] ::-webkit-scrollbar {
+  width: 5px;
+}
+[data-copilotkit] ::-webkit-scrollbar-track {
+  background: transparent;
+}
+[data-copilotkit] ::-webkit-scrollbar-thumb {
+  background: rgba(156, 173, 222, 0.15);
+  border-radius: 9999px;
+}
+[data-copilotkit] ::-webkit-scrollbar-thumb:hover {
+  background: rgba(156, 173, 222, 0.3);
+}
+/* Firefox */
+[data-copilotkit] * {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(156, 173, 222, 0.15) transparent;
+}
+
+/* ── Scroll-to-bottom button — visible on dark theme ─────────────────── */
+/* CopilotKit v2 uses [data-slot] attributes for slot components */
+.dark [data-copilotkit] [data-slot="scrollToBottomButton"],
+.dark [data-copilotkit] button[aria-label*="scroll"],
+.dark [data-copilotkit] button[aria-label*="bottom"],
+/* Fallback: target any absolute-positioned button near bottom of scroll area */
+.dark [data-copilotkit] [class*="scroll"] > button {
+  background: rgba(255, 255, 255, 0.15);
+  color: rgba(255, 255, 255, 0.9);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  backdrop-filter: blur(8px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  transition: all 0.2s ease;
+}
+
+.dark [data-copilotkit] [data-slot="scrollToBottomButton"]:hover,
+.dark [data-copilotkit] button[aria-label*="scroll"]:hover,
+.dark [data-copilotkit] button[aria-label*="bottom"]:hover,
+.dark [data-copilotkit] [class*="scroll"] > button:hover {
+  background: rgba(255, 255, 255, 0.25);
+  border-color: rgba(255, 255, 255, 0.4);
+}
+
+/* ===================================================================
+   CopilotKit v2 — Kill stray vertical/horizontal lines
+   The v2 base CSS sets `*{border-color:var(--border)}` which, combined
+   with any inherited border-width (hr, prose blockquote, internal
+   dividers), produces visible lines. We blanket-reset border-color
+   inside the CopilotKit root, then explicitly re-apply borders only
+   on the elements we style ourselves (message bubbles, input pill).
+   =================================================================== */
+.dark [data-copilotkit] *:not(.certinator-assistant-msg):not(.certinator-user-bubble):not(.quiz-card):not(.quiz-option):not(.quiz-badge) {
+  border-color: transparent;
+}
+
+/* ===================================================================
+   CopilotKit v2 — Message bubble styling
+   Uses plain CSS marker classes injected via the v2 slot-system
+   `className` prop. These override default cpk: utility classes
+   because un-layered rules always beat @layer utilities.
+   =================================================================== */
+
+/* ── Assistant message — translucent navy panel ──────────────────── */
+.dark [data-copilotkit] .certinator-assistant-msg {
+  background: rgba(13, 21, 46, 0.6);
+  border: 1px solid rgba(42, 53, 94, 0.6);
+  border-radius: 1rem;
+  padding: 1.25rem 1.25rem 0.5rem;
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.2);
+}
+
+/* ── Reduce spacing for horizontal separators (hr) in assistant messages ── */
+.dark [data-copilotkit] .certinator-assistant-msg hr,
+.dark [data-copilotkit] .certinator-assistant-msg [role="separator"] {
+  margin: 0.75rem 0;
+  padding: 0;
+  border: 0;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  opacity: 0.5;
+  height: 0;
+}
+
+/* ── Reduce spacing between headings and content ── */
+.dark [data-copilotkit] .certinator-assistant-msg h1,
+.dark [data-copilotkit] .certinator-assistant-msg h2,
+.dark [data-copilotkit] .certinator-assistant-msg h3 {
+  margin-top: 1rem;
+  margin-bottom: 0.5rem;
+}
+
+/* ── First heading should have no top margin ── */
+.dark [data-copilotkit] .certinator-assistant-msg h1:first-child,
+.dark [data-copilotkit] .certinator-assistant-msg h2:first-child,
+.dark [data-copilotkit] .certinator-assistant-msg h3:first-child,
+.dark [data-copilotkit] .certinator-assistant-msg > div:first-child h1,
+.dark [data-copilotkit] .certinator-assistant-msg > div:first-child h2,
+.dark [data-copilotkit] .certinator-assistant-msg > div:first-child h3 {
+  margin-top: 0;
+}
+
+/* ── Reduce paragraph spacing ── */
+.dark [data-copilotkit] .certinator-assistant-msg p {
+  margin-bottom: 0.5rem;
+}
+
+.dark [data-copilotkit] .certinator-assistant-msg p:last-child {
+  margin-bottom: 0;
+}
+
+/* ── Reduce list spacing ── */
+.dark [data-copilotkit] .certinator-assistant-msg ul,
+.dark [data-copilotkit] .certinator-assistant-msg ol {
+  margin-top: 0.5rem;
+  margin-bottom: 0.5rem;
+  padding-left: 1.25rem;
+}
+
+.dark [data-copilotkit] .certinator-assistant-msg li {
+  margin-bottom: 0.25rem;
+}
+
+/* ── Override CopilotKit/prose excessive spacing ── */
+.dark [data-copilotkit] .certinator-assistant-msg .prose,
+.dark [data-copilotkit] .certinator-assistant-msg [class*="prose"] {
+  --tw-prose-body: inherit;
+  line-height: 1.6;
+}
+
+.dark [data-copilotkit] .certinator-assistant-msg .prose hr,
+.dark [data-copilotkit] .certinator-assistant-msg [class*="prose"] hr {
+  margin-top: 0.75rem;
+  margin-bottom: 0.75rem;
+}
+
+.dark [data-copilotkit] .certinator-assistant-msg .prose h2,
+.dark [data-copilotkit] .certinator-assistant-msg [class*="prose"] h2 {
+  margin-top: 1rem;
+  margin-bottom: 0.5rem;
+}
+
+/* ── User message bubble — primary-accent gradient ───────────────── */
+.dark [data-copilotkit] .certinator-user-bubble {
+  background: linear-gradient(
+    135deg,
+    rgba(40, 55, 120, 0.75),
+    rgba(25, 38, 90, 0.75)
+  );
+  border: 1px solid rgba(111, 135, 255, 0.3);
+  border-radius: 18px;
+  box-shadow: 0 4px 6px -1px rgba(111, 135, 255, 0.1);
+}
+
+/* ── Toolbar — fade in on hover ──────────────────────────────────── */
+.dark [data-copilotkit] .certinator-assistant-msg > div:last-child,
+.dark [data-copilotkit] .certinator-user-msg > div:last-child {
+  opacity: 0.4;
+  transition: opacity 0.15s ease;
+}
+.dark [data-copilotkit] .certinator-assistant-msg:hover > div:last-child,
+.dark [data-copilotkit] .certinator-user-msg:hover > div:last-child {
+  opacity: 1;
+}
+
+/* ── Chat input pill — override the default light bg ─────────────── */
+.dark [data-copilotkit] .certinator-chat-input [data-layout] {
+  background: rgba(13, 22, 48, 0.85);
+  box-shadow: 0 4px 16px rgba(2, 8, 26, 0.4);
+}
+
+/* ===================================================================
+   Quiz Card  (rendered by useHumanInTheLoop "quiz_answer")
+   =================================================================== */
+
+.quiz-card {
+  border: 1px solid rgba(126, 156, 255, 0.22);
+  background: rgba(10, 17, 36, 0.92);
+  border-radius: 1rem;
+  padding: 1.25rem;
+  margin: 0.5rem 0;
+}
+
+.quiz-card__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.75rem;
+}
+
+.quiz-card__counter {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #9cadde;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.quiz-card__badges {
+  display: flex;
+  gap: 0.4rem;
+}
+
+.quiz-badge {
+  display: inline-block;
+  font-size: 0.65rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  padding: 0.2rem 0.55rem;
+  border-radius: 9999px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.06);
+  color: #b8c6f0;
+}
+
+.quiz-badge--easy {
+  border-color: rgba(52, 211, 153, 0.35);
+  color: #6ee7b7;
+  background: rgba(52, 211, 153, 0.1);
+}
+
+.quiz-badge--medium {
+  border-color: rgba(251, 191, 36, 0.35);
+  color: #fbbf24;
+  background: rgba(251, 191, 36, 0.1);
+}
+
+.quiz-badge--hard {
+  border-color: rgba(248, 113, 113, 0.35);
+  color: #fca5a5;
+  background: rgba(248, 113, 113, 0.1);
+}
+
+.quiz-card__question {
+  font-size: 0.95rem;
+  line-height: 1.6;
+  color: #e8eeff;
+  margin-bottom: 1rem;
+}
+
+.quiz-card__options {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.quiz-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  padding: 0.7rem 0.9rem;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 0.65rem;
+  background: rgba(255, 255, 255, 0.04);
+  color: #d8e2ff;
+  cursor: pointer;
+  text-align: left;
+  font-size: 0.88rem;
+  line-height: 1.5;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.quiz-option:hover:not(:disabled) {
+  border-color: rgba(111, 135, 255, 0.5);
+  background: rgba(111, 135, 255, 0.08);
+}
+
+.quiz-option:disabled {
+  cursor: default;
+  opacity: 0.65;
+}
+
+/* Compound selector gives (0,2,0) specificity to beat
+   .quiz-option:disabled (0,1,1) and :hover:not(:disabled) (0,2,1). */
+.quiz-option.quiz-option--selected,
+.quiz-option.quiz-option--selected:hover {
+  border-color: #6f87ff;
+  background: rgba(111, 135, 255, 0.18);
+  opacity: 1;
+}
+
+.quiz-option__letter {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.6rem;
+  height: 1.6rem;
+  border-radius: 0.4rem;
+  background: rgba(111, 135, 255, 0.15);
+  font-weight: 700;
+  font-size: 0.78rem;
+  color: #8fb1ff;
+}
+
+.quiz-option__text {
+  flex: 1;
+}
+
+.quiz-card__submitted {
+  margin-top: 0.75rem;
+  font-size: 0.8rem;
+  color: #6ee7b7;
+}
+
+/* ===================================================================
+   Quiz Session  (full quiz with navigation and bulk submit)
+   =================================================================== */
+
+.quiz-session {
+  border: 1px solid rgba(126, 156, 255, 0.22);
+  background: rgba(10, 17, 36, 0.92);
+  border-radius: 1rem;
+  padding: 1.25rem;
+  margin: 0.5rem 0;
+}
+
+/* Progress bar */
+.quiz-session__progress {
+  margin-bottom: 0.75rem;
+}
+
+.quiz-session__bar-track {
+  height: 6px;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.08);
+  overflow: hidden;
+}
+
+.quiz-session__bar-fill {
+  height: 100%;
+  border-radius: 3px;
+  background: linear-gradient(90deg, #6f87ff, #a78bfa);
+  transition: width 0.3s ease;
+}
+
+.quiz-session__bar-label {
+  display: block;
+  margin-top: 0.35rem;
+  font-size: 0.7rem;
+  color: #9cadde;
+  text-align: right;
+}
+
+/* Question-number dots */
+.quiz-session__dots {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin-bottom: 0.75rem;
+}
+
+.quiz-session__dot {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.65rem;
+  height: 1.65rem;
+  border-radius: 0.4rem;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.04);
+  color: #9cadde;
+  font-size: 0.7rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.quiz-session__dot:hover {
+  border-color: rgba(111, 135, 255, 0.5);
+  background: rgba(111, 135, 255, 0.08);
+}
+
+.quiz-session__dot--current {
+  border-color: #6f87ff;
+  background: rgba(111, 135, 255, 0.2);
+  color: #e8eeff;
+}
+
+.quiz-session__dot--answered {
+  border-color: rgba(52, 211, 153, 0.4);
+  background: rgba(52, 211, 153, 0.12);
+  color: #6ee7b7;
+}
+
+/* Nested quiz card — remove outer border so it blends */
+.quiz-session .quiz-card {
+  border: none;
+  background: transparent;
+  padding: 0;
+  margin: 0;
+}
+
+/* Navigation row */
+.quiz-session__nav {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 1rem;
+  gap: 0.5rem;
+}
+
+.quiz-session__btn {
+  padding: 0.5rem 1rem;
+  border-radius: 0.6rem;
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.quiz-session__btn--nav {
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.05);
+  color: #b8c6f0;
+}
+
+.quiz-session__btn--nav:hover:not(:disabled) {
+  border-color: rgba(111, 135, 255, 0.5);
+  background: rgba(111, 135, 255, 0.1);
+}
+
+.quiz-session__btn--nav:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.quiz-session__btn--submit {
+  border: 1px solid rgba(52, 211, 153, 0.4);
+  background: rgba(52, 211, 153, 0.15);
+  color: #6ee7b7;
+}
+
+.quiz-session__btn--submit:hover:not(:disabled) {
+  background: rgba(52, 211, 153, 0.25);
+}
+
+.quiz-session__btn--submit:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+/* ===================================================================
+   Processing Indicator  (shown between quiz submit and feedback)
+   =================================================================== */
+
+.quiz-processing-indicator {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  border: 1px solid rgba(126, 156, 255, 0.18);
+  background: rgba(10, 17, 36, 0.92);
+  border-radius: 1rem;
+  padding: 1rem 1.25rem;
+  margin: 0.5rem 0;
+}
+
+.quiz-processing-indicator__spinner {
+  flex-shrink: 0;
+  width: 1.25rem;
+  height: 1.25rem;
+  border: 2px solid rgba(126, 156, 255, 0.2);
+  border-top-color: rgba(126, 156, 255, 0.8);
+  border-radius: 50%;
+  animation: quiz-spin 0.8s linear infinite;
+}
+
+@keyframes quiz-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.quiz-processing-indicator__text {
+  font-size: 0.875rem;
+  color: rgba(200, 215, 255, 0.7);
+}
+
+/* ===================================================================
+   Offer Card  (rendered by useHumanInTheLoop study_plan / practice)
+   =================================================================== */
+
+.offer-card {
+  border: 1px solid rgba(126, 156, 255, 0.22);
+  background: rgba(10, 17, 36, 0.92);
+  border-radius: 1rem;
+  padding: 1.25rem;
+  margin: 0.5rem 0;
+}
+
+.offer-card__cert {
+  display: inline-block;
+  font-size: 0.65rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  padding: 0.2rem 0.55rem;
+  border-radius: 9999px;
+  border: 1px solid rgba(111, 135, 255, 0.3);
+  background: rgba(111, 135, 255, 0.1);
+  color: #8fb1ff;
+  margin-bottom: 0.75rem;
+}
+
+.offer-card__message {
+  font-size: 0.92rem;
+  line-height: 1.6;
+  color: #e8eeff;
+  margin-bottom: 1rem;
+}
+
+.offer-card__actions {
+  display: flex;
+  gap: 0.65rem;
+}
+
+.offer-btn {
+  padding: 0.55rem 1.2rem;
+  border-radius: 0.6rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.offer-btn--yes {
+  border: 1px solid rgba(52, 211, 153, 0.4);
+  background: rgba(52, 211, 153, 0.12);
+  color: #6ee7b7;
+}
+
+.offer-btn--yes:hover {
+  background: rgba(52, 211, 153, 0.25);
+}
+
+.offer-btn--no {
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.04);
+  color: #9cadde;
+}
+
+.offer-btn--no:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.offer-card__result {
+  font-size: 0.85rem;
+  color: #9cadde;
+  font-style: italic;
+}
+
+/* ===================================================================
+   Quiz Dashboard  (sidebar panel, driven by useCoAgent shared state)
+   =================================================================== */
+
+.quiz-dashboard {
+  border: 1px solid rgba(126, 156, 255, 0.22);
+  background: linear-gradient(
+    160deg,
+    rgba(15, 22, 50, 0.95),
+    rgba(10, 16, 33, 0.95)
+  );
+  border-radius: 1rem;
+  padding: 1.25rem;
+}
+
+.quiz-dashboard__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1rem;
+}
+
+.quiz-dashboard__title {
+  font-size: 1rem;
+  font-weight: 700;
+  color: #e8eeff;
+  margin: 0;
+}
+
+.quiz-dashboard__status {
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  padding: 0.2rem 0.55rem;
+  border-radius: 9999px;
+}
+
+.quiz-dashboard__status--active {
+  border: 1px solid rgba(251, 191, 36, 0.35);
+  color: #fbbf24;
+  background: rgba(251, 191, 36, 0.1);
+}
+
+.quiz-dashboard__status--done {
+  border: 1px solid rgba(52, 211, 153, 0.35);
+  color: #6ee7b7;
+  background: rgba(52, 211, 153, 0.1);
+}
+
+.quiz-dashboard__progress {
+  margin-bottom: 0.85rem;
+}
+
+.quiz-dashboard__bar-track {
+  width: 100%;
+  height: 6px;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.08);
+  overflow: hidden;
+  margin-bottom: 0.35rem;
+}
+
+.quiz-dashboard__bar-fill {
+  height: 100%;
+  border-radius: 3px;
+  background: linear-gradient(90deg, #6f87ff, #a78bfa);
+  transition: width 0.35s ease;
+}
+
+.quiz-dashboard__bar-label {
+  font-size: 0.75rem;
+  color: #9cadde;
+}
+
+.quiz-dashboard__topics {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin-bottom: 0.75rem;
+}
+
+.quiz-dashboard__current {
+  font-size: 0.82rem;
+  color: #b8c6f0;
+  margin: 0;
+}
+
+/* ===================================================================
+   Workflow Progress (in-chat state updates)
+   =================================================================== */
+
+.workflow-progress {
+  position: relative;
+  border: 1px solid rgba(126, 156, 255, 0.22);
+  background: linear-gradient(135deg, #0d1526 0%, #111827 50%, #0d1526 100%);
+  border-radius: 0.9rem;
+  padding: 1.1rem 1rem;
+  margin: 0.45rem 0;
+  overflow: hidden;
+}
+
+/* Decorative blobs */
+.workflow-progress::before {
+  content: "";
+  position: absolute;
+  top: -1rem;
+  right: -1rem;
+  width: 5rem;
+  height: 5rem;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(59, 130, 246, 0.12), transparent 70%);
+  pointer-events: none;
+}
+.workflow-progress::after {
+  content: "";
+  position: absolute;
+  bottom: -1rem;
+  left: -1rem;
+  width: 4rem;
+  height: 4rem;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(16, 185, 129, 0.1), transparent 70%);
+  pointer-events: none;
+}
+
+.workflow-progress__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+}
+
+.workflow-progress__title {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 700;
+  background: linear-gradient(90deg, #3b82f6, #8b5cf6);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.workflow-progress__ratio {
+  font-size: 0.78rem;
+  color: #6b7db3;
+}
+
+.workflow-progress__bar-track {
+  position: relative;
+  width: 100%;
+  height: 0.42rem;
+  border-radius: 999px;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.1);
+  margin-bottom: 0.7rem;
+}
+
+.workflow-progress__bar-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #3b82f6, #8b5cf6);
+  transition: width 0.4s ease;
+}
+
+.workflow-progress__message {
+  margin: 0 0 0.65rem;
+  font-size: 0.82rem;
+  color: #94a3c9;
+}
+
+.workflow-progress__steps {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.32rem;
+}
+
+/* Each row */
+.workflow-progress__step {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 0.6rem;
+  padding: 0.45rem 0.6rem;
+  transition: background 0.3s, border-color 0.3s;
+  overflow: hidden;
+}
+
+/* Icon circle wrapper */
+.workflow-progress__step-icon-wrap {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.5rem;
+  height: 1.5rem;
+  border-radius: 50%;
+  z-index: 1;
+}
+
+/* Pending dot */
+.workflow-progress__step-dot {
+  width: 0.45rem;
+  height: 0.45rem;
+  border-radius: 50%;
+  background: #475569;
+}
+
+.workflow-progress__step-text {
+  font-size: 0.82rem;
+  font-weight: 500;
+  position: relative;
+  z-index: 1;
+}
+
+/* Column wrapper for message + reasoning sub-line */
+.workflow-progress__step-body {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+  position: relative;
+  z-index: 1;
+}
+
+/* Muted reasoning sub-line shown below the step message */
+.workflow-progress__step-reasoning {
+  display: block;
+  font-size: 0.72rem;
+  font-style: italic;
+  color: var(--muted-foreground, rgba(148, 163, 184, 0.85));
+  margin-top: 2px;
+  padding-left: 1px;
+  position: relative;
+  z-index: 1;
+  line-height: 1.4;
+}
+
+/* Animated background overlay for active step */
+.workflow-progress__step-pulse {
+  position: absolute;
+  inset: 0;
+  border-radius: 0.6rem;
+  background: linear-gradient(90deg, rgba(59, 130, 246, 0.08), rgba(139, 92, 246, 0.08));
+  animation: progressPulse 2s ease-in-out infinite;
+}
+
+@keyframes progressPulse {
+  0%, 100% { opacity: 0.6; }
+  50% { opacity: 1; }
+}
+
+/* Done */
+.workflow-progress__step--done {
+  color: rgba(255, 255, 255, 0.95);
+  background: rgba(16, 185, 129, 0.12);
+  border-color: rgba(16, 185, 129, 0.3);
+}
+.workflow-progress__step--done .workflow-progress__step-icon-wrap {
+  background: linear-gradient(135deg, #10b981, #059669);
+  box-shadow: 0 0 8px rgba(16, 185, 129, 0.35);
+}
+.workflow-progress__step--done .workflow-progress__step-text {
+  color: rgba(255, 255, 255, 0.95);
+}
+.workflow-progress__step--done .workflow-progress__step-reasoning {
+  color: rgba(255, 255, 255, 0.6);
+}
+
+/* Active */
+.workflow-progress__step--active {
+  color: #c7d8ff;
+  background: rgba(59, 130, 246, 0.1);
+  border-color: rgba(99, 102, 241, 0.45);
+  box-shadow: 0 2px 12px rgba(59, 130, 246, 0.15);
+}
+.workflow-progress__step--active .workflow-progress__step-icon-wrap {
+  background: linear-gradient(135deg, #3b82f6, #7c3aed);
+  box-shadow: 0 0 8px rgba(99, 102, 241, 0.4);
+}
+.workflow-progress__step--active .workflow-progress__step-text {
+  color: #dce6ff;
+  font-size: 0.86rem;
+}
+
+/* Pending */
+.workflow-progress__step--pending {
+  color: #4b5a7d;
+  background: rgba(255, 255, 255, 0.02);
+}
+.workflow-progress__step--pending .workflow-progress__step-icon-wrap {
+  background: #1e2d45;
+  border: 1px solid #2d3f5c;
+}
+
+/* ===================================================================
+   Error Boundary Fallback
+   =================================================================== */
+
+.error-boundary-fallback {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  min-height: 200px;
+  border: 1px solid rgba(255, 100, 100, 0.25);
+  background: rgba(30, 8, 8, 0.65);
+  border-radius: 1rem;
+  padding: 2rem;
+  text-align: center;
+}
+
+.error-boundary-fallback__title {
+  font-size: 1rem;
+  font-weight: 600;
+  color: rgba(255, 200, 200, 0.9);
+  margin: 0;
+}
+
+.error-boundary-fallback__message {
+  font-size: 0.8rem;
+  color: rgba(255, 160, 160, 0.65);
+  margin: 0;
+  max-width: 32ch;
+}
+
+.error-boundary-fallback__reset {
+  margin-top: 0.5rem;
+  padding: 0.45rem 1.1rem;
+  background: rgba(111, 135, 255, 0.15);
+  border: 1px solid rgba(111, 135, 255, 0.35);
+  border-radius: 9999px;
+  color: #8fb1ff;
+  font-size: 0.82rem;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+.error-boundary-fallback__reset:hover {
+  background: rgba(111, 135, 255, 0.25);
+  border-color: rgba(111, 135, 255, 0.55);
+}
+
+/* ===================================================================
+   Slow-Run Indicator  (shown after 30 s of an active CopilotKit run)
+   =================================================================== */
+
+.slow-run-indicator {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  border: 1px solid rgba(255, 200, 80, 0.2);
+  background: rgba(30, 25, 8, 0.8);
+  border-radius: 0.8rem;
+  padding: 0.65rem 1rem;
+  margin-bottom: 0.6rem;
+}
+
+.slow-run-indicator__spinner {
+  flex-shrink: 0;
+  width: 1rem;
+  height: 1rem;
+  border: 2px solid rgba(255, 200, 80, 0.2);
+  border-top-color: rgba(255, 200, 80, 0.75);
+  border-radius: 50%;
+  animation: quiz-spin 0.9s linear infinite;
+}
+
+.slow-run-indicator__text {
+  font-size: 0.8rem;
+  color: rgba(255, 220, 130, 0.75);
+}
+
+/* ===================================================================
+   HITL Submit Error  (inline error + dismiss inside CustomAssistantMessage)
+   =================================================================== */
+
+.hitl-submit-error {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  border: 1px solid rgba(255, 100, 100, 0.3);
+  background: rgba(50, 8, 8, 0.7);
+  border-radius: 0.75rem;
+  padding: 0.7rem 1rem;
+  margin: 0.4rem 0;
+}
+
+.hitl-submit-error__message {
+  flex: 1;
+  font-size: 0.82rem;
+  color: rgba(255, 190, 190, 0.85);
+}
+
+.hitl-submit-error__retry {
+  flex-shrink: 0;
+  padding: 0.25rem 0.7rem;
+  background: rgba(255, 100, 100, 0.12);
+  border: 1px solid rgba(255, 100, 100, 0.3);
+  border-radius: 9999px;
+  color: rgba(255, 170, 170, 0.85);
+  font-size: 0.75rem;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.hitl-submit-error__retry:hover {
+  background: rgba(255, 100, 100, 0.22);
+}
+
+/* ===================================================================
+   G15 — Frontend Error Resilience: new UI elements
+   =================================================================== */
+
+/* ── SlowRunIndicator cancel button ──────────────────────────────── */
+.slow-run-indicator__cancel {
+  flex-shrink: 0;
+  margin-left: auto;
+  padding: 0.25rem 0.75rem;
+  background: rgba(255, 200, 80, 0.1);
+  border: 1px solid rgba(255, 200, 80, 0.3);
+  border-radius: 9999px;
+  color: rgba(255, 220, 130, 0.85);
+  font-size: 0.75rem;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.slow-run-indicator__cancel:hover {
+  background: rgba(255, 200, 80, 0.22);
+}
+
+/* Cancelled state — green confirmation */
+.slow-run-indicator--cancelled {
+  border-color: rgba(110, 231, 183, 0.2);
+  background: rgba(8, 30, 20, 0.8);
+}
+.slow-run-indicator--cancelled .slow-run-indicator__text {
+  color: rgba(110, 231, 183, 0.75);
+}
+
+/* ── Session recovered banner ────────────────────────────────────── */
+.session-recovered-banner {
+  position: fixed;
+  top: 1rem;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.6rem 1.2rem;
+  border: 1px solid rgba(110, 231, 183, 0.25);
+  background: rgba(8, 30, 20, 0.92);
+  backdrop-filter: blur(8px);
+  border-radius: 9999px;
+  font-size: 0.82rem;
+  color: rgba(110, 231, 183, 0.85);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+  animation: recovery-slide-in 0.35s ease-out;
+}
+
+.session-recovered-banner__dismiss {
+  padding: 0.15rem 0.6rem;
+  background: rgba(110, 231, 183, 0.1);
+  border: 1px solid rgba(110, 231, 183, 0.25);
+  border-radius: 9999px;
+  color: rgba(110, 231, 183, 0.8);
+  font-size: 0.72rem;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.session-recovered-banner__dismiss:hover {
+  background: rgba(110, 231, 183, 0.2);
+}
+
+@keyframes recovery-slide-in {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) translateY(-1rem);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+}
+
+/* ── Quiz inactivity warning (inside QuizSession) ────────────────── */
+.quiz-session__inactivity {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  border: 1px solid rgba(251, 191, 36, 0.25);
+  background: rgba(30, 25, 8, 0.85);
+  border-radius: 0.8rem;
+  padding: 0.6rem 1rem;
+  margin-bottom: 0.6rem;
+  font-size: 0.8rem;
+  color: rgba(251, 191, 36, 0.8);
+  animation: recovery-slide-in 0.3s ease-out;
+}
+
+.quiz-session__inactivity-dismiss {
+  flex-shrink: 0;
+  margin-left: auto;
+  padding: 0.2rem 0.65rem;
+  background: rgba(251, 191, 36, 0.1);
+  border: 1px solid rgba(251, 191, 36, 0.25);
+  border-radius: 9999px;
+  color: rgba(251, 191, 36, 0.85);
+  font-size: 0.72rem;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.quiz-session__inactivity-dismiss:hover {
+  background: rgba(251, 191, 36, 0.22);
+}

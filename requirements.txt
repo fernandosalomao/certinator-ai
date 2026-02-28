@@ -1,0 +1,56 @@
+# =============================================================================
+# Certinator AI — Python Dependencies
+# =============================================================================
+# Pin versions to avoid breaking changes while Agent Framework is in preview.
+
+# Microsoft Agent Framework (core + Azure AI)
+agent-framework-core==1.0.0b260107
+agent-framework-azure-ai==1.0.0b260107
+
+# FoundryLocal SDK (for local LLM inference)
+# Only needed if LLM_PROVIDER=local
+foundry-local-sdk
+
+# Note: GitHub Models (LLM_PROVIDER=github) uses OpenAIChatClient from
+# agent-framework-core — no extra dependencies needed, just set GITHUB_TOKEN.
+
+# HTTP server wrapper
+azure-ai-agentserver-core==1.0.0b10
+azure-ai-agentserver-agentframework==1.0.0b10
+agent-framework-ag-ui==1.0.0b260107
+
+# Azure Identity for DefaultAzureCredential
+azure-identity
+
+# HTTP client for Microsoft Learn Catalog API
+requests>=2.31.0
+
+# Azure AI Projects SDK (Foundry agents v2)
+# Pinned to 2.0.0b3 — 2.0.0b4 removed PromptAgentDefinitionText which agent-framework-azure-ai depends on
+azure-ai-projects==2.0.0b3
+
+# Environment variable loading
+python-dotenv
+
+# Debugging support (VS Code Python Debugger)
+debugpy
+
+# Agent dev CLI (AI Toolkit Agent Inspector integration)
+agent-dev-cli
+
+# Pydantic (structured data models for inter-agent messaging)
+pydantic
+
+# Retry with exponential backoff for transient Azure/MCP failures
+tenacity>=8.2.0
+
+# OpenTelemetry tracing (gRPC exporter for AI Toolkit)
+opentelemetry-exporter-otlp-proto-grpc
+# Pin semantic conventions to avoid breaking changes with LLM_REQUEST_MODEL
+opentelemetry-semantic-conventions-ai==0.4.13
+
+# Evaluation framework (Azure AI Evaluation SDK)
+azure-ai-evaluation
+
+# Workflow visualization (mermaid generation)
+graphviz>=0.20.0
