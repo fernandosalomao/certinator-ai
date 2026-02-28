@@ -5,7 +5,8 @@ Certinator AI is a multi-agent system that assists students in preparing for Mic
 > [!NOTE]
 > Certinator AI is an open-source project developed for the [Agents League](https://github.com/microsoft/agentsleague), competing in the [Reasoning Agents track](https://github.com/microsoft/agentsleague/tree/main/starter-kits/2-reasoning-agents).
 
-For a deep dive into the system design, see [ARCHITECTURE.md](ARCHITECTURE.md).
+> [!TIP]
+> For a deep dive into the system design, see [ARCHITECTURE.md](ARCHITECTURE.md).
 
 ---
 
@@ -229,8 +230,8 @@ For the full workflow graph and routing logic, see [ARCHITECTURE.md](ARCHITECTUR
 ### Example Queries to Try
 
 - **Certification info**: "Tell me about the AZ-104 certification and its prerequisites"
-- **Study planning**: "Create a 6-week study plan for AZ-900. I can study 2 hours per day."
-- **Practice questions**: "Give me 5 practice questions on Azure networking for AZ-104"
+- **Study planning**: "Create a 6-week study plan for AZ-305. I can study 2 hours per day."
+- **Practice questions**: "Give me 10 practice questions for AZ-400"
 
 ---
 

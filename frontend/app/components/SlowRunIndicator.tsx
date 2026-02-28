@@ -15,7 +15,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useAgent } from "@copilotkit/react-core/v2";
 
 /** Time (ms) before showing the slow-run warning. */
-const SLOW_THRESHOLD_MS = 30_000;
+const SLOW_THRESHOLD_MS = 120_000;
 
 /** Auto-dismiss the "cancelled" confirmation after this many ms. */
 const CANCELLED_DISPLAY_MS = 5_000;

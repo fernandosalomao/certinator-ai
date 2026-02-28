@@ -619,11 +619,11 @@ class PracticeQuestionsExecutor(Executor):
             # Offer a focused study plan for weak topics.
             weak_str = ", ".join(weak_topics) if weak_topics else "all topics"
             offer = (
-                f"You scored **{overall_pct}%** — not quite a "
+                f"You scored {overall_pct}% — not quite a "
                 f"passing score ({PASS_THRESHOLD_PCT}% required).\n\n"
                 f"Your weak areas are: **{weak_str}**.\n\n"
-                "Would you like me to create a **focused study "
-                "plan** to help you improve on these topics?"
+                "Would you like me to create a focused study "
+                "plan to help you improve on these topics?"
             )
             await ctx.request_info(
                 request_data={
