@@ -4,9 +4,23 @@ Certinator AI — Practice Quiz Scoring Tool
 Deterministic scoring function used by the PracticeHandler to
 evaluate student answers against generated questions.  All arithmetic
 is done in Python so the LLM never has to calculate scores.
+
+Also provides parser helpers extracted from *PracticeQuestionsExecutor*
+so they can be reused and tested independently.
 """
 
 from __future__ import annotations
+
+import json
+import logging
+import re
+
+from executors.models import PracticeQuestion, RoutingDecision
+
+logger = logging.getLogger(__name__)
+
+# Minimum score percentage to pass a practice quiz
+PASS_THRESHOLD_PCT = 70
 
 
 def score_quiz(
@@ -78,14 +92,14 @@ def score_quiz(
                 "percentage": pct,
             }
         )
-        if pct < 70:
+        if pct < PASS_THRESHOLD_PCT:
             weak_topics.append(topic)
 
     return {
         "total_questions": total,
         "correct_answers": correct,
         "overall_percentage": overall_pct,
-        "passed": overall_pct >= 70,
+        "passed": overall_pct >= PASS_THRESHOLD_PCT,
         "topic_breakdown": topic_breakdown,
         "weak_topics": weak_topics,
         "question_results": question_results,
@@ -189,3 +203,104 @@ def validate_questions(
             violations.append(f"No question covers expected topic '{expected_topic}'.")
 
     return violations
+
+
+# ---------------------------------------------------------------------------
+# Parsers extracted from PracticeQuestionsExecutor
+# ---------------------------------------------------------------------------
+
+
+def parse_questions(raw_text: str) -> list[PracticeQuestion]:
+    """Parse JSON question array from agent output.
+
+    Strips markdown code fences if present and validates
+    each question against the PracticeQuestion schema.
+
+    Parameters:
+        raw_text (str): Raw text from the practice agent.
+
+    Returns:
+        list[PracticeQuestion]: Validated question objects.
+    """
+    cleaned = raw_text.strip()
+    # Strip markdown code fences if present.
+    if cleaned.startswith("```"):
+        lines = cleaned.split("\n")
+        lines = [ln for ln in lines if not ln.strip().startswith("```")]
+        cleaned = "\n".join(lines)
+
+    # Remove trailing commas before } or ] (common LLM JSON error).
+    cleaned = re.sub(r",\s*([}\]])", r"\1", cleaned)
+
+    try:
+        data = json.loads(cleaned)
+        if isinstance(data, list):
+            return [PracticeQuestion.model_validate(item) for item in data]
+    except (json.JSONDecodeError, Exception) as exc:
+        logger.warning(
+            "Failed to parse practice questions JSON: %s",
+            exc,
+        )
+    return []
+
+
+def parse_answer_payload(
+    raw: str,
+    total_questions: int,
+) -> dict[str, str]:
+    """Parse answer payload from the frontend.
+
+    Accepts either:
+      - JSON: ``{"answers":{"1":"B","2":"A",...}}``
+      - Single letter: ``"B"`` (legacy, first question only)
+
+    Parameters:
+        raw (str): Raw answer string from HITL.
+        total_questions (int): Expected question count.
+
+    Returns:
+        dict[str, str]: Map of question number -> answer letter.
+    """
+    raw = raw.strip()
+
+    # Try JSON first.
+    try:
+        parsed = json.loads(raw)
+        if isinstance(parsed, dict):
+            answers = parsed.get("answers", parsed)
+            if isinstance(answers, dict):
+                return {str(k): str(v).strip().upper() for k, v in answers.items()}
+    except (json.JSONDecodeError, ValueError):
+        pass
+
+    # Fallback: single letter (legacy / plain-text CLI).
+    normalised = raw.strip().upper()
+    if normalised in ("A", "B", "C", "D"):
+        return {"1": normalised}
+
+    # Try to extract a letter from free text.
+    match = re.search(r"\b([A-D])\b", raw.upper())
+    if match:
+        return {"1": match.group(1)}
+
+    return {}
+
+
+def extract_question_count(
+    decision: RoutingDecision,
+    default: int = 10,
+) -> int:
+    """Extract requested question count from user intent.
+
+    Parameters:
+        decision (RoutingDecision): Routing decision.
+        default (int): Default count when none found.
+
+    Returns:
+        int: Clamped question count (1-50).
+    """
+    text = f"{decision.task} {decision.context}".lower()
+    match = re.search(r"(\d+)\s*questions?", text)
+    if match:
+        return max(1, min(int(match.group(1)), 50))
+    return default

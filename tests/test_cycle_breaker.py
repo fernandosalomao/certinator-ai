@@ -261,9 +261,15 @@ class TestPostStudyPlanCycleBreaker:
             },
         )
 
-        with patch(
-            "executors.post_study_plan_executor.emit_response",
-            new_callable=AsyncMock,
+        with (
+            patch(
+                "executors.post_study_plan_executor.emit_response",
+                new_callable=AsyncMock,
+            ),
+            patch(
+                "executors.post_study_plan_executor.update_workflow_progress",
+                new_callable=AsyncMock,
+            ),
         ):
             asyncio.run(
                 executor.on_practice_offer(
@@ -381,6 +387,10 @@ class TestPracticeQuestionsCycleBreaker:
                 "executors.practice_questions_executor.emit_state_snapshot",
                 new_callable=AsyncMock,
             ),
+            patch(
+                "executors.practice_questions_executor.update_workflow_progress",
+                new_callable=AsyncMock,
+            ),
         ):
             asyncio.run(executor._score_and_report(state, ctx))
 
@@ -426,6 +436,10 @@ class TestPracticeQuestionsCycleBreaker:
                 "executors.practice_questions_executor.emit_state_snapshot",
                 new_callable=AsyncMock,
             ),
+            patch(
+                "executors.practice_questions_executor.update_workflow_progress",
+                new_callable=AsyncMock,
+            ),
         ):
             asyncio.run(executor._score_and_report(state, ctx))
 
@@ -448,8 +462,8 @@ class TestCycleBreakerConstants:
     """Verify shared constants are consistent."""
 
     def test_max_cycles_is_two(self) -> None:
-        """Default cap should be 2."""
-        assert MAX_CROSS_ROUTE_CYCLES == 2
+        """Default cap should be 3."""
+        assert MAX_CROSS_ROUTE_CYCLES == 3
 
     def test_shared_state_key_name(self) -> None:
         """Key name should be descriptive and stable."""

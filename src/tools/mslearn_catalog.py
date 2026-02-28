@@ -32,14 +32,19 @@ from __future__ import annotations
 
 import json
 import logging
-import os
 import re
-import time
 from typing import Annotated, Any, Optional
 
 import requests
 from agent_framework import ai_function
 from azure.identity import DefaultAzureCredential
+
+from tools.mslearn_cache import (
+    build_id_index,
+    is_cache_valid,
+    load_cache,
+    save_cache,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -47,16 +52,6 @@ logger = logging.getLogger(__name__)
 
 _API_BASE_URL = "https://learn.microsoft.com/api/v1"
 _API_VERSION = "2023-11-01-preview"
-
-# Cache lives in ``<project_root>/cache/``
-_PROJECT_ROOT = os.path.dirname(
-    os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-)
-_CACHE_DIR = os.path.join(_PROJECT_ROOT, "cache")
-_LP_CACHE_FILE = os.path.join(_CACHE_DIR, "learning_paths.json")
-
-# Cache TTL: 24 hours in seconds
-_CACHE_TTL_SECONDS = 24 * 60 * 60
 
 # Maximum page size for the list endpoints (API limit is 100)
 _MAX_PAGE_SIZE = 100
@@ -124,61 +119,6 @@ def _fetch_all_pages(initial_url: str, token: str) -> list[dict[str, Any]]:
 # ── Learning Paths cache ─────────────────────────────────────────────────
 
 
-def _is_cache_valid() -> bool:
-    """
-    Check whether the LP cache file exists and is within TTL.
-
-    Returns:
-        bool: True if cache is fresh (< 24 hours old).
-    """
-    if not os.path.exists(_LP_CACHE_FILE):
-        return False
-    try:
-        with open(_LP_CACHE_FILE, "r", encoding="utf-8") as fh:
-            data = json.load(fh)
-        created_at = data.get("createdAt", 0)
-        return (time.time() - created_at) < _CACHE_TTL_SECONDS
-    except (json.JSONDecodeError, OSError):
-        return False
-
-
-def _load_cache() -> dict[str, Any]:
-    """
-    Load the LP cache from disk.
-
-    Returns:
-        dict[str, Any]: Cache data with ``createdAt`` and
-            ``learningPaths`` (URL-keyed dict).
-
-    Raises:
-        FileNotFoundError: If cache file does not exist.
-    """
-    with open(_LP_CACHE_FILE, "r", encoding="utf-8") as fh:
-        return json.load(fh)
-
-
-def _save_cache(lp_list: list[dict[str, Any]]) -> None:
-    """
-    Persist the LP cache to disk as a flat list.
-
-    Parameters:
-        lp_list (list[dict]): List of learning path records
-            (id, url, title, durationInMinutes, modules).
-    """
-    os.makedirs(_CACHE_DIR, exist_ok=True)
-    payload = {
-        "createdAt": time.time(),
-        "learningPaths": lp_list,
-    }
-    with open(_LP_CACHE_FILE, "w", encoding="utf-8") as fh:
-        json.dump(payload, fh, indent=2, ensure_ascii=False)
-    logger.info(
-        "LP cache saved: %d entries → %s",
-        len(lp_list),
-        _LP_CACHE_FILE,
-    )
-
-
 def _build_lp_cache() -> list[dict[str, Any]]:
     """
     Fetch ALL learning paths from the API and cache them.
@@ -213,7 +153,7 @@ def _build_lp_cache() -> list[dict[str, Any]]:
             }
         )
 
-    _save_cache(lp_list)
+    save_cache(lp_list)
     return lp_list
 
 
@@ -224,31 +164,11 @@ def _get_lp_list() -> list[dict[str, Any]]:
     Returns:
         list[dict]: List of learning path records from cache.
     """
-    if _is_cache_valid():
+    if is_cache_valid():
         logger.debug("LP cache is fresh, loading from disk")
-        cache = _load_cache()
+        cache = load_cache()
         return cache.get("learningPaths", [])
     return _build_lp_cache()
-
-
-def _build_id_index(
-    lp_list: list[dict[str, Any]],
-) -> dict[str, dict[str, Any]]:
-    """
-    Build an in-memory ID-keyed index from the LP list.
-
-    Parameters:
-        lp_list (list[dict]): List of LP records.
-
-    Returns:
-        dict[str, dict]: LP-id → LP record mapping.
-    """
-    index: dict[str, dict[str, Any]] = {}
-    for lp in lp_list:
-        lp_id = lp.get("id", "")
-        if lp_id:
-            index[lp_id] = lp
-    return index
 
 
 # ── Exam → LP discovery ───────────────────────────────────────────────────
@@ -444,7 +364,7 @@ def fetch_exam_learning_paths(
     # ── Load LP cache and build ID index ────────────────────────────
     try:
         lp_list = _get_lp_list()
-        id_index = _build_id_index(lp_list)
+        id_index = build_id_index(lp_list)
     except Exception as exc:
         logger.error("Failed to load LP cache: %s", exc, exc_info=True)
         return json.dumps({"error": f"Failed to load learning paths cache: {exc}"})

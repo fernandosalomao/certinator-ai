@@ -30,12 +30,12 @@ _SRC = str(Path(__file__).resolve().parent.parent / "src")
 if _SRC not in sys.path:
     sys.path.insert(0, _SRC)
 
-from app import (
+from health import (
     _check_llm_endpoint,
     _check_mcp_server,
     _check_thread_store,
-    _thread_store,
 )
+from thread_store import _thread_store
 
 # ──────────────────────────────────────────────────────────────────────────
 # Unit tests for individual check functions
@@ -217,10 +217,10 @@ class TestHealthEndpoint:
         """Create a minimal FastAPI app with health endpoints."""
         from fastapi import FastAPI
 
-        from app import _register_health_endpoints
+        from health import register_health_endpoints
 
         app = FastAPI()
-        _register_health_endpoints(app)
+        register_health_endpoints(app)
         return app
 
     def test_health_returns_200(self) -> None:
@@ -241,10 +241,10 @@ class TestReadyEndpoint:
         """Create a minimal FastAPI app with health endpoints."""
         from fastapi import FastAPI
 
-        from app import _register_health_endpoints
+        from health import register_health_endpoints
 
         app = FastAPI()
-        _register_health_endpoints(app)
+        register_health_endpoints(app)
         return app
 
     def test_ready_all_ok(self) -> None:
@@ -253,15 +253,15 @@ class TestReadyEndpoint:
 
         with (
             patch(
-                "app._check_llm_endpoint",
+                "health._check_llm_endpoint",
                 return_value=(True, "status=200"),
             ),
             patch(
-                "app._check_mcp_server",
+                "health._check_mcp_server",
                 return_value=(True, "status=200"),
             ),
             patch(
-                "app._check_thread_store",
+                "health._check_thread_store",
                 return_value=(True, "in-memory, threads=0"),
             ),
         ):
@@ -280,15 +280,15 @@ class TestReadyEndpoint:
 
         with (
             patch(
-                "app._check_llm_endpoint",
+                "health._check_llm_endpoint",
                 return_value=(False, "Connection refused"),
             ),
             patch(
-                "app._check_mcp_server",
+                "health._check_mcp_server",
                 return_value=(True, "status=200"),
             ),
             patch(
-                "app._check_thread_store",
+                "health._check_thread_store",
                 return_value=(True, "in-memory, threads=0"),
             ),
         ):
@@ -305,15 +305,15 @@ class TestReadyEndpoint:
 
         with (
             patch(
-                "app._check_llm_endpoint",
+                "health._check_llm_endpoint",
                 return_value=(True, "status=200"),
             ),
             patch(
-                "app._check_mcp_server",
+                "health._check_mcp_server",
                 return_value=(False, "status=503"),
             ),
             patch(
-                "app._check_thread_store",
+                "health._check_thread_store",
                 return_value=(True, "in-memory, threads=0"),
             ),
         ):
@@ -330,15 +330,15 @@ class TestReadyEndpoint:
 
         with (
             patch(
-                "app._check_llm_endpoint",
+                "health._check_llm_endpoint",
                 return_value=(False, "timeout"),
             ),
             patch(
-                "app._check_mcp_server",
+                "health._check_mcp_server",
                 return_value=(False, "DNS failure"),
             ),
             patch(
-                "app._check_thread_store",
+                "health._check_thread_store",
                 return_value=(True, "in-memory, threads=0"),
             ),
         ):
@@ -357,15 +357,15 @@ class TestReadyEndpoint:
 
         with (
             patch(
-                "app._check_llm_endpoint",
+                "health._check_llm_endpoint",
                 return_value=(True, "status=200"),
             ),
             patch(
-                "app._check_mcp_server",
+                "health._check_mcp_server",
                 return_value=(True, "status=200"),
             ),
             patch(
-                "app._check_thread_store",
+                "health._check_thread_store",
                 return_value=(True, "in-memory, threads=0"),
             ),
         ):

@@ -45,6 +45,7 @@ from executors import (
     emit_response,
     emit_state_snapshot,
     extract_response_text,
+    is_affirmative_reply,
     safe_agent_run,
     update_workflow_progress,
 )
@@ -59,7 +60,16 @@ from executors.post_study_plan_executor import (
     CROSS_ROUTE_CYCLE_KEY,
     MAX_CROSS_ROUTE_CYCLES,
 )
-from tools.practice import score_quiz, validate_questions
+from executors.quiz_feedback import fallback_feedback, generate_feedback_report
+from tools.practice import (
+    PASS_THRESHOLD_PCT,
+    extract_question_count,
+    parse_answer_payload,
+    parse_questions,
+    score_quiz,
+    validate_questions,
+)
+from tools.topics import extract_topic_distribution
 
 logger = logging.getLogger(__name__)
 
@@ -311,46 +321,16 @@ class PracticeQuestionsExecutor(Executor):
         await self._score_and_report(state, ctx)
 
     @staticmethod
+    @staticmethod
     def _parse_answer_payload(
         raw: str,
         total_questions: int,
     ) -> dict[str, str]:
         """Parse answer payload from the frontend.
 
-        Accepts either:
-          - JSON: ``{"answers":{"1":"B","2":"A",...}}``
-          - Single letter: ``"B"`` (legacy, first question only)
-
-        Parameters:
-            raw (str): Raw answer string from HITL.
-            total_questions (int): Expected question count.
-
-        Returns:
-            dict[str, str]: Map of question number → answer letter.
+        .. deprecated:: Delegates to :func:`tools.practice.parse_answer_payload`.
         """
-        raw = raw.strip()
-
-        # Try JSON first.
-        try:
-            parsed = json.loads(raw)
-            if isinstance(parsed, dict):
-                answers = parsed.get("answers", parsed)
-                if isinstance(answers, dict):
-                    return {str(k): str(v).strip().upper() for k, v in answers.items()}
-        except (json.JSONDecodeError, ValueError):
-            pass
-
-        # Fallback: single letter (legacy / plain-text CLI).
-        normalised = raw.strip().upper()
-        if normalised in ("A", "B", "C", "D"):
-            return {"1": normalised}
-
-        # Try to extract a letter from free text.
-        match = re.search(r"\b([A-D])\b", raw.upper())
-        if match:
-            return {"1": match.group(1)}
-
-        return {}
+        return parse_answer_payload(raw, total_questions)
 
     # ------------------------------------------------------------------
     # Study plan offer processing
@@ -369,20 +349,7 @@ class PracticeQuestionsExecutor(Executor):
             answer (str): Student's response (yes/no).
             ctx (WorkflowContext): Workflow context.
         """
-        reply = answer.strip().lower()
-        affirmative = (
-            reply
-            in (
-                "yes",
-                "y",
-                "sure",
-                "ok",
-                "okay",
-                "please",
-                "yeah",
-            )
-            or "yes" in reply
-        )
+        affirmative = is_affirmative_reply(answer)
 
         metrics.hitl_study_plan_offers.add(
             1,
@@ -573,7 +540,7 @@ class PracticeQuestionsExecutor(Executor):
             [ChatMessage(role=Role.USER, text=prompt)],
         )
         raw_text = extract_response_text(response, fallback="[]")
-        return self._parse_questions(raw_text)
+        return parse_questions(raw_text)
 
     @staticmethod
     def _parse_questions(
@@ -581,35 +548,9 @@ class PracticeQuestionsExecutor(Executor):
     ) -> list[PracticeQuestion]:
         """Parse JSON question array from agent output.
 
-        Strips markdown code fences if present and validates
-        each question against the PracticeQuestion schema.
-
-        Parameters:
-            raw_text (str): Raw text from the practice agent.
-
-        Returns:
-            list[PracticeQuestion]: Validated question objects.
+        .. deprecated:: Delegates to :func:`tools.practice.parse_questions`.
         """
-        cleaned = raw_text.strip()
-        # Strip markdown code fences if present.
-        if cleaned.startswith("```"):
-            lines = cleaned.split("\n")
-            lines = [ln for ln in lines if not ln.strip().startswith("```")]
-            cleaned = "\n".join(lines)
-
-        # Remove trailing commas before } or ] (common LLM JSON error).
-        cleaned = re.sub(r",\s*([}\]])", r"\1", cleaned)
-
-        try:
-            data = json.loads(cleaned)
-            if isinstance(data, list):
-                return [PracticeQuestion.model_validate(item) for item in data]
-        except (json.JSONDecodeError, Exception) as exc:
-            logger.warning(
-                "Failed to parse practice questions JSON: %s",
-                exc,
-            )
-        return []
+        return parse_questions(raw_text)
 
     # ------------------------------------------------------------------
     # Internal: scoring and feedback
@@ -728,7 +669,7 @@ class PracticeQuestionsExecutor(Executor):
             weak_str = ", ".join(weak_topics) if weak_topics else "all topics"
             offer = (
                 f"You scored **{overall_pct}%** — not quite a "
-                "passing score (70% required).\n\n"
+                f"passing score ({PASS_THRESHOLD_PCT}% required).\n\n"
                 f"Your weak areas are: **{weak_str}**.\n\n"
                 "Would you like me to create a **focused study "
                 "plan** to help you improve on these topics?"
@@ -749,66 +690,9 @@ class PracticeQuestionsExecutor(Executor):
     ) -> str:
         """Generate a detailed feedback report via the practice agent.
 
-        Parameters:
-            state (QuizState): Completed quiz state.
-            score_result (dict): Output from ``score_quiz``.
-
-        Returns:
-            str: Markdown feedback report.
+        .. deprecated:: Delegates to :func:`executors.quiz_feedback.generate_feedback_report`.
         """
-        details = []
-        for i, q in enumerate(state.questions):
-            user_ans = state.answers[i] if i < len(state.answers) else "?"
-            details.append(
-                {
-                    "number": q.question_number,
-                    "question": q.question_text,
-                    "correct": q.correct_answer,
-                    "student": user_ans,
-                    "is_correct": user_ans == q.correct_answer,
-                    "explanation": q.explanation,
-                    "topic": q.topic,
-                }
-            )
-
-        prompt = (
-            f"Generate a feedback report for a "
-            f"{state.certification} practice quiz.\n\n"
-            f"Overall score: "
-            f"{score_result['overall_percentage']}% "
-            f"({score_result['correct_answers']}/"
-            f"{score_result['total_questions']})\n"
-            f"Passed: "
-            f"{'Yes' if score_result['passed'] else 'No'}\n\n"
-            "Topic breakdown:\n"
-            f"{json.dumps(score_result['topic_breakdown'], indent=2)}"
-            "\n\nQuestion details:\n"
-            f"{json.dumps(details, indent=2)}\n\n"
-            "Generate a clear Markdown feedback report with:\n"
-            "1. Overall assessment\n"
-            "2. Results summary table "
-            "(topic | correct | total | %)\n"
-            "3. Per-question review (question, student answer, "
-            "correct answer, explanation)\n"
-            "4. Study recommendations for weak topics\n"
-        )
-
-        try:
-            response = await safe_agent_run(
-                self.practice_agent,
-                [ChatMessage(role=Role.USER, text=prompt)],
-            )
-            return extract_response_text(
-                response,
-                fallback=self._fallback_feedback(state, score_result),
-            )
-        except Exception as exc:
-            logger.error(
-                "PracticeQuestions: feedback report generation failed: %s",
-                exc,
-                exc_info=True,
-            )
-            return self._fallback_feedback(state, score_result)
+        return await generate_feedback_report(self.practice_agent, state, score_result)
 
     @staticmethod
     def _fallback_feedback(
@@ -817,27 +701,9 @@ class PracticeQuestionsExecutor(Executor):
     ) -> str:
         """Build a minimal report when the LLM fails.
 
-        Parameters:
-            state (QuizState): Quiz state.
-            score_result (dict): Scoring data.
-
-        Returns:
-            str: Basic Markdown report.
+        .. deprecated:: Delegates to :func:`executors.quiz_feedback.fallback_feedback`.
         """
-        lines = [
-            f"# {state.certification} Quiz Results\n",
-            f"**Score:** {score_result['overall_percentage']}% "
-            f"({score_result['correct_answers']}/"
-            f"{score_result['total_questions']})\n",
-            "| Topic | Correct | Total | % |",
-            "|---|---:|---:|---:|",
-        ]
-        for tb in score_result.get("topic_breakdown", []):
-            lines.append(
-                f"| {tb['topic']} | {tb['correct']} | "
-                f"{tb['total']} | {tb['percentage']}% |"
-            )
-        return "\n".join(lines)
+        return fallback_feedback(state, score_result)
 
     # ------------------------------------------------------------------
     # Internal: topic fetching and helpers
@@ -877,7 +743,7 @@ class PracticeQuestionsExecutor(Executor):
                 exc_info=True,
             )
             return [{"name": f"{cert} General", "weight_pct": 100}]
-        topics = self._extract_topic_distribution(response)
+        topics = extract_topic_distribution(response)
         if topics:
             return topics
 
@@ -895,77 +761,9 @@ class PracticeQuestionsExecutor(Executor):
     ) -> list[dict]:
         """Extract topic names and exam weights from structured response.
 
-        Uses learning path names as topic areas. Prefers the
-        ``exam_weight_pct`` field when available (set by the agent
-        from official exam topic weights); falls back to deriving
-        proportional weights from durations.
-
-        Parameters:
-            response (Any): Agent response.
-
-        Returns:
-            list[dict]: Topic dictionaries with ``name``
-                and ``weight_pct``.
+        .. deprecated:: Delegates to :func:`tools.topics.extract_topic_distribution`.
         """
-        structured = getattr(response, "value", None)
-
-        # Import the robust parser that handles string/dict/validated responses
-        from executors.learning_path_fetcher_executor import (
-            LearningPathFetcherExecutor,
-        )
-
-        parsed = LearningPathFetcherExecutor._parse_response_value(response)
-        if parsed is not None:
-            structured = parsed
-
-        if isinstance(structured, dict):
-            try:
-                structured = LearningPathFetcherResponse.model_validate(
-                    structured,
-                )
-            except Exception:
-                return []
-
-        if not isinstance(structured, LearningPathFetcherResponse):
-            return []
-
-        paths = structured.learning_paths
-        if not paths:
-            return []
-
-        # Collect exam skills from modules (skill info is at module level).
-        skill_weights: dict[str, float] = {}
-        for lp in paths:
-            for mod in lp.modules:
-                skill = mod.exam_skill
-                if skill and skill not in skill_weights:
-                    skill_weights[skill] = mod.exam_weight_pct
-
-        has_exam_weights = any(w > 0 for w in skill_weights.values())
-
-        if has_exam_weights and skill_weights:
-            # Normalise so weights sum to 100
-            total_weight = sum(skill_weights.values()) or 1
-            return [
-                {
-                    "name": skill,
-                    "weight_pct": max(round(weight / total_weight * 100), 1),
-                }
-                for skill, weight in skill_weights.items()
-            ]
-
-        # Fallback: derive weights from durations
-        total_minutes = sum(lp.duration_minutes for lp in paths) or 1
-        result: list[dict] = []
-        cumulative = 0
-        for i, lp in enumerate(paths):
-            if i == len(paths) - 1:
-                pct = 100 - cumulative
-            else:
-                pct = round(lp.duration_minutes / total_minutes * 100)
-                cumulative += pct
-            result.append({"name": lp.title, "weight_pct": max(pct, 1)})
-        return result
+        return extract_topic_distribution(response)
 
     @staticmethod
     def _extract_question_count(
@@ -973,14 +771,6 @@ class PracticeQuestionsExecutor(Executor):
     ) -> int:
         """Extract requested question count from user intent.
 
-        Parameters:
-            decision (RoutingDecision): Routing decision.
-
-        Returns:
-            int: Clamped question count (1–50).
+        .. deprecated:: Delegates to :func:`tools.practice.extract_question_count`.
         """
-        text = f"{decision.task} {decision.context}".lower()
-        match = re.search(r"(\d+)\s*questions?", text)
-        if match:
-            return max(1, min(int(match.group(1)), 50))
-        return DEFAULT_PRACTICE_QUESTIONS
+        return extract_question_count(decision, default=DEFAULT_PRACTICE_QUESTIONS)

@@ -17,7 +17,7 @@ The main features of Certinator AI include:
   - Price and registration details
 
 - **Study Plan Generation**: Based on the student schedule, the system can generate a personalized study plan that includes:
-  - Recommended learning resources (e.g., Microsoft Learn modules, documentation, online courses)
+  - Recommended Microsoft Learn modules.
   - Suggested study schedule leading up to the exam date
   - Tips for effective exam preparation
 

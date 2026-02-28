@@ -2,13 +2,10 @@
 
 from __future__ import annotations
 
-import os
-import sys
 from typing import Any
 
 from agent_framework import MCPStreamableHTTPTool
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from config import LLM_MODEL_LEARNING_PATH_FETCHER, get_ai_client
 from safety import SAFETY_SYSTEM_PROMPT
 from tools.mslearn_catalog import fetch_exam_learning_paths

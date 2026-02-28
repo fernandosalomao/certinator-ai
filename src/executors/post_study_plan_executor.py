@@ -27,6 +27,7 @@ from executors import (
     emit_response,
     emit_response_streamed,
     emit_state_snapshot,
+    is_affirmative_reply,
     update_workflow_progress,
 )
 from executors.models import (
@@ -180,20 +181,7 @@ class PostStudyPlanExecutor(Executor):
             answer (str): Student's response (yes/no).
             ctx (WorkflowContext): Workflow context.
         """
-        reply = answer.strip().lower()
-        affirmative = (
-            reply
-            in (
-                "yes",
-                "y",
-                "sure",
-                "ok",
-                "okay",
-                "please",
-                "yeah",
-            )
-            or "yes" in reply
-        )
+        affirmative = is_affirmative_reply(answer)
 
         metrics.hitl_practice_offers.add(
             1,
