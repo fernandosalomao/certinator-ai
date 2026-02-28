@@ -55,7 +55,6 @@ from azure.identity.aio import DefaultAzureCredential
 
 from agents import (
     create_cert_info_agent,
-    create_cert_info_agent_no_mcp,
     create_coordinator_agent,
     create_critic_agent,
     create_learning_path_fetcher_agent,
@@ -271,12 +270,6 @@ async def build_workflow():
         credential=credential,
     )
 
-    # Fallback agent: no MCP — used when learn.microsoft.com/api/mcp is down
-    cert_info_fallback_agent = create_cert_info_agent_no_mcp(
-        project_endpoint=project_endpoint,
-        credential=credential,
-    )
-
     # LearningPathFetcher agent: uses MCP + Catalog API tool
     learning_path_agent = create_learning_path_fetcher_agent(
         mcp_tool=mcp_tool,
@@ -307,7 +300,6 @@ async def build_workflow():
 
     certification_info_executor = CertificationInfoExecutor(
         cert_info_agent=cert_info_agent,
-        cert_info_fallback_agent=cert_info_fallback_agent,
     )
     learning_path_fetcher_executor = LearningPathFetcherExecutor(
         learning_path_agent=learning_path_agent,

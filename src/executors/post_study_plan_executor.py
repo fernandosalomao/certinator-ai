@@ -40,13 +40,6 @@ logger = logging.getLogger(__name__)
 # Shared-state key for persisting context across HITL turns.
 POST_STUDY_PLAN_CTX_KEY = "post_study_plan_context"
 
-# Shared-state key for the cross-route cycle counter.
-CROSS_ROUTE_CYCLE_KEY = "cross_route_cycle_count"
-
-# Maximum number of full Practice ↔ StudyPlan cycles before
-# the cycle breaker kicks in and stops offering practice.
-MAX_CROSS_ROUTE_CYCLES = 3
-
 
 class PostStudyPlanExecutor(Executor):
     """Offer practice questions after a study plan is delivered.
@@ -100,47 +93,6 @@ class PostStudyPlanExecutor(Executor):
         await emit_response_streamed(ctx, self.id, approved.content)
 
         cert = approved.certification or "your certification"
-
-        # ── Cross-route cycle breaker ─────────────────────────
-        try:
-            cycle_count = await ctx.shared_state.get(
-                CROSS_ROUTE_CYCLE_KEY,
-            )
-        except KeyError:
-            cycle_count = 0
-
-        if cycle_count >= MAX_CROSS_ROUTE_CYCLES:
-            # Cap reached — do NOT offer another practice round.
-            logger.info(
-                "Cycle breaker: cap reached (%d >= %d) for %s — "
-                "skipping practice offer.",
-                cycle_count,
-                MAX_CROSS_ROUTE_CYCLES,
-                cert,
-            )
-            metrics.cycle_breaker_cap_reached.add(
-                1,
-                {
-                    "source_executor": self.id,
-                    "certification": cert,
-                },
-            )
-            await emit_response(
-                ctx,
-                self.id,
-                "You've already completed multiple study-and-"
-                "practice rounds — great effort! Here are some "
-                "tips to keep going:\n\n"
-                "1. **Review your weak areas** using the study "
-                "plan above.\n"
-                "2. **Hands-on practice** in the Azure portal "
-                "or sandbox environments.\n"
-                "3. **Schedule your exam** when you feel "
-                "confident — you've got this!\n\n"
-                "Feel free to start a new conversation anytime "
-                "for a fresh practice session.",
-            )
-            return
 
         context_data = {
             "certification": approved.certification,
@@ -196,23 +148,6 @@ class PostStudyPlanExecutor(Executor):
         context = state.get("context", "") if state else ""
 
         if affirmative:
-            # Increment the cross-route cycle counter.
-            try:
-                cycle_count = await ctx.shared_state.get(
-                    CROSS_ROUTE_CYCLE_KEY,
-                )
-            except KeyError:
-                cycle_count = 0
-            await ctx.shared_state.set(
-                CROSS_ROUTE_CYCLE_KEY,
-                cycle_count + 1,
-            )
-            logger.info(
-                "Cycle breaker: incremented counter to %d for %s.",
-                cycle_count + 1,
-                cert,
-            )
-
             await update_workflow_progress(
                 ctx=ctx,
                 route="practice",

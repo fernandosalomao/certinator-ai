@@ -546,7 +546,7 @@ src/
 │   ├── __init__.py                 # Shared helpers (emit_response, safe_agent_run, etc.)
 │   ├── models.py                   # All typed data models (Pydantic)
 │   ├── coordinator_executor.py     # CoordinatorRouter
-│   ├── certification_info_executor.py  # CertInfoHandler (+ MCP fallback)
+│   ├── certification_info_executor.py  # CertInfoHandler
 │   ├── learning_path_fetcher_executor.py # LearningPathFetcherHandler
 │   ├── study_plan_generator_executor.py  # StudyPlanSchedulerHandler
 │   ├── critic_executor.py          # CriticExecutor
@@ -772,7 +772,7 @@ flowchart LR
 | **MCP-first instructions** | Agents instructed to always use MCP, never answer from memory alone |
 | **Auto-approve disclaimer** | When critic loop reaches iteration cap, content is delivered with a transparent disclaimer about verification needs |
 | **Bounded revision loops** | Maximum 2 critic iterations prevents infinite token consumption |
-| **MCP fallback agent** | `CertificationInfoExecutor` uses `cert_info_fallback_agent` (no MCP) with mandatory unavailability disclaimer when MS Learn MCP is down |
+| **MCP error handling** | `CertificationInfoExecutor` logs MCP failures, increments `mcp_unavailable_events` metric, and returns a user-friendly error message |
 | **Transient error retry** | `safe_agent_run()` with exponential backoff (max 5 attempts) for timeout, rate limit, and network errors |
 | **Question validation** | `validate_questions()` deterministically checks practice questions for structural integrity, topic coverage, and deduplication before delivery |
 
@@ -785,7 +785,7 @@ flowchart LR
 | **PII protection** | Detection and redaction on user input before logging to traces |
 | **Groundedness** | `GroundednessEvaluator` to verify CertInfo output is grounded in MCP search results |
 | **Rate limiting** | Per-session rate limiting at the FastAPI layer |
-| **MCP fallback** | Graceful degradation with disclaimer when Microsoft Learn MCP is unavailable |
+| **MCP error handling** | MCP failures are counted and surfaced with a user-friendly error message |
 | **Transparency** | Citation tracking — preserve source URLs from MCP tool calls in final output |
 
 ---
