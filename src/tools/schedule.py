@@ -19,6 +19,14 @@ from typing import Annotated
 
 from agent_framework import ai_function
 
+from executors.models import (
+    ScheduleResult,
+    ScheduleWeek,
+    ScheduleWeekItem,
+    SkillSummaryItem,
+    SkippedModule,
+)
+
 
 @ai_function(
     name="schedule_study_plan",
@@ -88,6 +96,39 @@ def schedule_study_plan(
         paths_list: list[dict] = json.loads(learning_paths)
     except json.JSONDecodeError as exc:
         return json.dumps({"error": f"Invalid learning_paths JSON: {exc}"})
+
+    result = compute_schedule(
+        paths_list=paths_list,
+        hours_per_week=hours_per_week,
+        total_weeks=total_weeks,
+        prioritize_by_date=prioritize_by_date,
+    )
+    return result.model_dump_json(indent=2)
+
+
+def compute_schedule(
+    paths_list: list[dict],
+    hours_per_week: float,
+    total_weeks: int,
+    prioritize_by_date: bool,
+) -> ScheduleResult:
+    """Compute a study schedule from parsed learning path data.
+
+    This is the core scheduling engine. It accepts already-parsed
+    learning path dicts and returns a typed ``ScheduleResult``
+    object, avoiding unnecessary JSON round-trips when called
+    directly from Python code.
+
+    Parameters:
+        paths_list (list[dict]): Parsed learning path objects.
+        hours_per_week (float): Weekly study hours available.
+        total_weeks (int): Total weeks until exam (or default 8).
+        prioritize_by_date (bool): Trim content to fit deadline.
+
+    Returns:
+        ScheduleResult: Typed schedule with weekly plan, coverage
+            stats, skill summary, and notes.
+    """
 
     total_hours = hours_per_week * total_weeks
 
@@ -267,26 +308,30 @@ def schedule_study_plan(
             f"{total_weeks} weeks. Consider increasing daily study time."
         )
 
-    return json.dumps(
-        {
-            "total_hours_available": round(total_hours, 1),
-            "total_hours_planned": total_planned_hours,
-            "total_weeks_needed": weeks_needed,
-            "coverage_pct": coverage_pct,
-            "skill_summary": skill_summary,
-            "weekly_plan": weekly_plan,
-            "skipped_modules": [
-                {
-                    "module": m["module"],
-                    "url": m["url"],
-                    "duration_minutes": m["duration_minutes"],
-                    "exam_skill": m["exam_skill"],
-                    "exam_weight_pct": m["exam_weight_pct"],
-                    "learning_path": m["learning_path"],
-                }
-                for m in skipped
-            ],
-            "notes": notes,
-        },
-        indent=2,
+    return ScheduleResult(
+        total_hours_available=round(total_hours, 1),
+        total_hours_planned=total_planned_hours,
+        total_weeks_needed=weeks_needed,
+        coverage_pct=coverage_pct,
+        skill_summary=[SkillSummaryItem(**s) for s in skill_summary],
+        weekly_plan=[
+            ScheduleWeek(
+                week=w["week"],
+                hours=w["hours"],
+                items=[ScheduleWeekItem(**item) for item in w["items"]],
+            )
+            for w in weekly_plan
+        ],
+        skipped_modules=[
+            SkippedModule(
+                module=m["module"],
+                url=m["url"],
+                duration_minutes=m["duration_minutes"],
+                exam_skill=m["exam_skill"],
+                exam_weight_pct=m["exam_weight_pct"],
+                learning_path=m["learning_path"],
+            )
+            for m in skipped
+        ],
+        notes=notes,
     )

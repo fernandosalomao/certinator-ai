@@ -14,7 +14,6 @@ Graph position::
                                             └──── RevisionRequest ─────┘
 """
 
-import json
 import logging
 import re
 from datetime import datetime
@@ -34,8 +33,14 @@ from executors import (
     safe_agent_run,
     update_workflow_progress,
 )
-from executors.models import LearningPathsData, RevisionRequest, SpecialistOutput
-from tools.schedule import schedule_study_plan
+from executors.models import (
+    LearningPathsData,
+    RevisionRequest,
+    ScheduleResult,
+    SpecialistOutput,
+    StudyConstraints,
+)
+from tools.schedule import compute_schedule
 
 logger = logging.getLogger(__name__)
 
@@ -217,24 +222,23 @@ class StudyPlanGeneratorExecutor(Executor):
             task=decision.task,
             context=decision.context,
         )
-        learning_paths_json = json.dumps(data.learning_paths, ensure_ascii=False)
 
         logger.info(
-            "StudyPlanGenerator: invoking schedule_study_plan "
-            "(hours_per_week=%s, total_weeks=%s, prioritize_by_date=%s)",
-            constraints["hours_per_week"],
-            constraints["total_weeks"],
-            constraints["prioritize_by_date"],
+            "StudyPlanGenerator: invoking compute_schedule "
+            "(hours_per_week=%s, total_weeks=%s, "
+            "prioritize_by_date=%s)",
+            constraints.hours_per_week,
+            constraints.total_weeks,
+            constraints.prioritize_by_date,
         )
 
-        schedule_json_text = schedule_study_plan(
-            learning_paths=learning_paths_json,
-            hours_per_week=constraints["hours_per_week"],
-            total_weeks=constraints["total_weeks"],
-            prioritize_by_date=constraints["prioritize_by_date"],
+        schedule = compute_schedule(
+            paths_list=data.learning_paths,
+            hours_per_week=constraints.hours_per_week,
+            total_weeks=constraints.total_weeks,
+            prioritize_by_date=constraints.prioritize_by_date,
         )
-        schedule_data = self._safe_json_loads(schedule_json_text)
-        schedule_pretty = json.dumps(schedule_data, ensure_ascii=False, indent=2)
+        schedule_pretty = schedule.model_dump_json(indent=2)
 
         prompt = (
             f"Create a personalised study plan for {cert}.\n\n"
@@ -275,27 +279,10 @@ class StudyPlanGeneratorExecutor(Executor):
             )
             return self._render_markdown_from_schedule(
                 cert=cert,
-                schedule_data=schedule_data,
-                hours_per_week=constraints["hours_per_week"],
-                total_weeks=constraints["total_weeks"],
+                schedule=schedule,
+                constraints=constraints,
             )
         return plan_text
-
-    @staticmethod
-    def _safe_json_loads(payload: str) -> dict:
-        """Parse JSON safely and return a dict fallback when parsing fails."""
-        try:
-            parsed = json.loads(payload)
-            if isinstance(parsed, dict):
-                return parsed
-        except json.JSONDecodeError:
-            pass
-        return {
-            "weekly_plan": [],
-            "skill_summary": [],
-            "skipped_modules": [],
-            "notes": [],
-        }
 
     @staticmethod
     def _looks_like_json(text: str) -> bool:
@@ -306,12 +293,18 @@ class StudyPlanGeneratorExecutor(Executor):
         )
 
     @staticmethod
-    def _derive_study_constraints(task: str, context: str) -> dict:
-        """
-        Derive study constraints from task/context text.
+    def _derive_study_constraints(
+        task: str,
+        context: str,
+    ) -> StudyConstraints:
+        """Derive study constraints from task/context text.
+
+        Parameters:
+            task (str): User's task description.
+            context (str): Additional user context.
 
         Returns:
-            dict: ``hours_per_week``, ``total_weeks``, ``prioritize_by_date``.
+            StudyConstraints: Typed study constraints.
         """
         text = f"{task} {context}".lower()
 
@@ -346,102 +339,97 @@ class StudyPlanGeneratorExecutor(Executor):
             except ValueError:
                 continue
 
-        return {
-            "hours_per_week": hours_per_week,
-            "total_weeks": total_weeks,
-            "prioritize_by_date": prioritize_by_date,
-        }
+        return StudyConstraints(
+            hours_per_week=hours_per_week,
+            total_weeks=total_weeks,
+            prioritize_by_date=prioritize_by_date,
+        )
 
     @staticmethod
     def _render_markdown_from_schedule(
         cert: str,
-        schedule_data: dict,
-        hours_per_week: float,
-        total_weeks: int,
+        schedule: ScheduleResult,
+        constraints: StudyConstraints,
     ) -> str:
-        """Render a deterministic Markdown study plan from schedule JSON."""
+        """Render a deterministic Markdown study plan.
+
+        Parameters:
+            cert (str): Certification code.
+            schedule (ScheduleResult): Computed schedule.
+            constraints (StudyConstraints): Study constraints.
+
+        Returns:
+            str: Formatted Markdown study plan.
+        """
         lines: list[str] = []
         lines.append(f"# {cert} Study Plan")
         lines.append("")
-        lines.append(f"- **Timeline:** {total_weeks} weeks")
-        lines.append(f"- **Availability:** {hours_per_week:.1f} hours/week")
-        coverage = schedule_data.get("coverage_pct", 0)
-        lines.append(f"- **Coverage:** {coverage}% of modules included")
-        total_planned = schedule_data.get("total_hours_planned", 0)
-        total_available = schedule_data.get("total_hours_available", 0)
+        lines.append(f"- **Timeline:** {constraints.total_weeks} weeks")
+        lines.append(f"- **Availability:** {constraints.hours_per_week:.1f} hours/week")
+        lines.append(f"- **Coverage:** {schedule.coverage_pct}% of modules included")
         lines.append(
-            f"- **Study time:** {total_planned}h planned / {total_available}h available"
+            f"- **Study time:** "
+            f"{schedule.total_hours_planned}h planned / "
+            f"{schedule.total_hours_available}h available"
         )
         lines.append("")
 
-        for week in schedule_data.get("weekly_plan", []):
-            week_num = week.get("week", "?")
-            week_hours = week.get("hours", 0)
-            lines.append(f"## Week {week_num} ({week_hours}h)")
+        for week in schedule.weekly_plan:
+            lines.append(f"## Week {week.week} ({week.hours}h)")
 
             # Group items by exam skill
             current_skill = None
-            for item in week.get("items", []):
-                skill_name = item.get("exam_skill", "")
-                weight = item.get("exam_weight_pct", 0)
-                mod_name = item.get("module", "Module")
-                url = item.get("url", "")
-                item_hours = item.get("hours", 0)
+            for item in week.items:
+                if item.exam_skill != current_skill:
+                    weight_str = (
+                        f" ({item.exam_weight_pct}%)" if item.exam_weight_pct else ""
+                    )
+                    lines.append(f"\n**{item.exam_skill}{weight_str}**")
+                    current_skill = item.exam_skill
 
-                if skill_name != current_skill:
-                    weight_str = f" ({weight}%)" if weight else ""
-                    lines.append(f"\n**{skill_name}{weight_str}**")
-                    current_skill = skill_name
-
-                if url:
-                    lines.append(f"- [{mod_name}]({url}) — {item_hours}h")
+                if item.url:
+                    lines.append(f"- [{item.module}]({item.url}) — {item.hours}h")
                 else:
-                    lines.append(f"- {mod_name} — {item_hours}h")
+                    lines.append(f"- {item.module} — {item.hours}h")
             lines.append("")
 
         # Exam skill coverage summary
-        skill_summary = schedule_data.get("skill_summary", [])
-        if skill_summary:
+        if schedule.skill_summary:
             lines.append("## Exam Skill Coverage")
             lines.append(
                 "| Exam Skill | Weight | Total Time | "
                 "Modules Included | Modules Skipped |"
             )
             lines.append("|---|---:|---:|---:|---:|")
-            for sk in skill_summary:
-                total_min = sk.get("total_minutes", 0)
-                hours_str = f"{round(total_min / 60, 1)}h"
-                weight = sk.get("exam_weight_pct", 0)
-                weight_str = f"{weight}%" if weight else "—"
+            for sk in schedule.skill_summary:
+                hours_str = f"{round(sk.total_minutes / 60, 1)}h"
+                weight_str = f"{sk.exam_weight_pct}%" if sk.exam_weight_pct else "—"
                 lines.append(
-                    f"| {sk.get('exam_skill', 'N/A')} | "
+                    f"| {sk.exam_skill} | "
                     f"{weight_str} | "
                     f"{hours_str} | "
-                    f"{sk.get('modules_included', 0)} | "
-                    f"{sk.get('modules_skipped', 0)} |"
+                    f"{sk.modules_included} | "
+                    f"{sk.modules_skipped} |"
                 )
             lines.append("")
 
         # Skipped modules
-        skipped = schedule_data.get("skipped_modules", [])
-        if skipped:
+        if schedule.skipped_modules:
             lines.append("## Skipped Modules")
             lines.append("*These modules are recommended if time allows.*\n")
-            for mod in skipped:
-                url = mod.get("url", "")
-                name = mod.get("module", "Module")
-                skill = mod.get("exam_skill", "")
-                dur = round(mod.get("duration_minutes", 0) / 60, 2)
-                if url:
-                    lines.append(f"- **{skill}**: [{name}]({url}) — {dur}h")
+            for mod in schedule.skipped_modules:
+                dur = round(mod.duration_minutes / 60, 2)
+                if mod.url:
+                    lines.append(
+                        f"- **{mod.exam_skill}**: [{mod.module}]({mod.url}) — {dur}h"
+                    )
                 else:
-                    lines.append(f"- **{skill}**: {name} — {dur}h")
+                    lines.append(f"- **{mod.exam_skill}**: {mod.module} — {dur}h")
             lines.append("")
 
-        notes = schedule_data.get("notes", [])
-        if notes:
+        if schedule.notes:
             lines.append("## Notes")
-            for note in notes:
+            for note in schedule.notes:
                 lines.append(f"> {note}")
             lines.append("")
 
