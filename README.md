@@ -1,5 +1,10 @@
 # Certinator AI
 
+<div align="center">
+<img alt="certinatorai" src=".github/assets/landing.jpg" />
+</div>
+
+---
 Certinator AI is a multi-agent system that assists students in preparing for Microsoft certification exams. Built on the **[Microsoft Agent Framework (MAF)](https://github.com/microsoft/agent-framework)**, it uses a graph-based workflow engine with 6 specialized agents, human-in-the-loop interactions, and critic-validated outputs.
 
 > [!NOTE]
