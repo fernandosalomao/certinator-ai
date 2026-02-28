@@ -45,6 +45,7 @@ from executors import (
     emit_response,
     emit_state_snapshot,
     extract_response_text,
+    get_user_friendly_error,
     is_affirmative_reply,
     safe_agent_run,
     update_workflow_progress,
@@ -153,8 +154,11 @@ class PracticeQuestionsExecutor(Executor):
             await emit_response(
                 ctx,
                 self.id,
-                "I encountered an issue generating practice questions. "
-                "Please try again.",
+                get_user_friendly_error(
+                    exc,
+                    "I encountered an issue generating practice questions. "
+                    "Please try again.",
+                ),
             )
             return
 
@@ -580,7 +584,8 @@ class PracticeQuestionsExecutor(Executor):
         for tb in result.get("topic_breakdown", []):
             metrics.quiz_topic_scores.record(
                 tb["percentage"],
-                {"topic": tb.get("topic", "unknown"), "certification": cert_label},
+                {"topic": tb.get("topic", "unknown"),
+                 "certification": cert_label},
             )
 
         # Generate feedback report via practice agent (Mode 2).

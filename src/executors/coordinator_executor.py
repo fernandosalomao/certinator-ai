@@ -21,6 +21,7 @@ import metrics
 from executors import (
     emit_response,
     extract_response_text,
+    get_user_friendly_error,
     safe_agent_run,
     update_workflow_progress,
 )
@@ -83,7 +84,10 @@ class CoordinatorExecutor(Executor):
             await emit_response(
                 ctx,
                 self.id,
-                "I encountered an issue processing your request. Please try again.",
+                get_user_friendly_error(
+                    exc,
+                    "I encountered an issue processing your request. Please try again.",
+                ),
             )
             return
         decision = self._extract_routing(response)
@@ -155,7 +159,8 @@ class CoordinatorExecutor(Executor):
             if isinstance(structured, dict):
                 return RoutingDecision.model_validate(structured)
         except Exception as exc:  # pragma: no cover - defensive fallback
-            logger.warning("Failed to parse structured routing output: %s", exc)
+            logger.warning(
+                "Failed to parse structured routing output: %s", exc)
 
         fallback_text = extract_response_text(response)
         if not fallback_text.strip():

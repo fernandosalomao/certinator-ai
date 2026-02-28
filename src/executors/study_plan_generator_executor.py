@@ -30,6 +30,7 @@ from agent_framework import (
 from executors import (
     emit_response,
     extract_response_text,
+    get_user_friendly_error,
     safe_agent_run,
     update_workflow_progress,
 )
@@ -111,7 +112,10 @@ class StudyPlanGeneratorExecutor(Executor):
             await emit_response(
                 ctx,
                 self.id,
-                "I encountered an issue generating the study plan. Please try again.",
+                get_user_friendly_error(
+                    exc,
+                    "I encountered an issue generating the study plan. Please try again.",
+                ),
             )
             return
         await ctx.send_message(
@@ -179,7 +183,10 @@ class StudyPlanGeneratorExecutor(Executor):
             await emit_response(
                 ctx,
                 self.id,
-                "I encountered an issue refining the study plan. Please try again.",
+                get_user_friendly_error(
+                    exc,
+                    "I encountered an issue refining the study plan. Please try again.",
+                ),
             )
             return
         plan_text = extract_response_text(
@@ -309,8 +316,10 @@ class StudyPlanGeneratorExecutor(Executor):
         text = f"{task} {context}".lower()
 
         hours_per_week = 6.0
-        match_week = re.search(r"(\d+(?:\.\d+)?)\s*hours?\s*(?:per|/)\s*week", text)
-        match_day = re.search(r"(\d+(?:\.\d+)?)\s*hours?\s*(?:per|/)\s*day", text)
+        match_week = re.search(
+            r"(\d+(?:\.\d+)?)\s*hours?\s*(?:per|/)\s*week", text)
+        match_day = re.search(
+            r"(\d+(?:\.\d+)?)\s*hours?\s*(?:per|/)\s*day", text)
         if match_week:
             hours_per_week = float(match_week.group(1))
         elif match_day:
@@ -325,7 +334,8 @@ class StudyPlanGeneratorExecutor(Executor):
             prioritize_by_date = True
 
         for fmt in ("%Y-%m-%d", "%d/%m/%Y", "%m/%d/%Y"):
-            match = re.search(r"(\d{4}-\d{2}-\d{2}|\d{1,2}/\d{1,2}/\d{4})", text)
+            match = re.search(
+                r"(\d{4}-\d{2}-\d{2}|\d{1,2}/\d{1,2}/\d{4})", text)
             if not match:
                 continue
             try:
@@ -365,8 +375,10 @@ class StudyPlanGeneratorExecutor(Executor):
         lines.append(f"# {cert} Study Plan")
         lines.append("")
         lines.append(f"- **Timeline:** {constraints.total_weeks} weeks")
-        lines.append(f"- **Availability:** {constraints.hours_per_week:.1f} hours/week")
-        lines.append(f"- **Coverage:** {schedule.coverage_pct}% of modules included")
+        lines.append(
+            f"- **Availability:** {constraints.hours_per_week:.1f} hours/week")
+        lines.append(
+            f"- **Coverage:** {schedule.coverage_pct}% of modules included")
         lines.append(
             f"- **Study time:** "
             f"{schedule.total_hours_planned}h planned / "
@@ -388,7 +400,8 @@ class StudyPlanGeneratorExecutor(Executor):
                     current_skill = item.exam_skill
 
                 if item.url:
-                    lines.append(f"- [{item.module}]({item.url}) — {item.hours}h")
+                    lines.append(
+                        f"- [{item.module}]({item.url}) — {item.hours}h")
                 else:
                     lines.append(f"- {item.module} — {item.hours}h")
             lines.append("")
@@ -424,7 +437,8 @@ class StudyPlanGeneratorExecutor(Executor):
                         f"- **{mod.exam_skill}**: [{mod.module}]({mod.url}) — {dur}h"
                     )
                 else:
-                    lines.append(f"- **{mod.exam_skill}**: {mod.module} — {dur}h")
+                    lines.append(
+                        f"- **{mod.exam_skill}**: {mod.module} — {dur}h")
             lines.append("")
 
         if schedule.notes:
@@ -434,8 +448,11 @@ class StudyPlanGeneratorExecutor(Executor):
             lines.append("")
 
         lines.append("## Exam Tips")
-        lines.append("- Reserve one session each week for review and weak areas.")
-        lines.append("- Complete the knowledge checks in each Microsoft Learn module.")
-        lines.append("- In the final week, focus on breadth and timing practice.")
+        lines.append(
+            "- Reserve one session each week for review and weak areas.")
+        lines.append(
+            "- Complete the knowledge checks in each Microsoft Learn module.")
+        lines.append(
+            "- In the final week, focus on breadth and timing practice.")
 
         return "\n".join(lines).strip()

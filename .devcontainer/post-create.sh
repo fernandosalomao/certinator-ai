@@ -11,6 +11,15 @@ echo "Setting up Certinator AI Development Environment"
 echo "========================================"
 
 # -----------------------------------------------------------------------------
+# System Dependencies
+# -----------------------------------------------------------------------------
+echo ""
+echo "📦 Installing system dependencies..."
+sudo apt-get update -q || true
+sudo apt-get install -y -q graphviz
+echo "✓ System dependencies installed"
+
+# -----------------------------------------------------------------------------
 # Backend Setup
 # -----------------------------------------------------------------------------
 echo ""

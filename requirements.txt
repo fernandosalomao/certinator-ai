@@ -26,7 +26,8 @@ azure-identity
 requests>=2.31.0
 
 # Azure AI Projects SDK (Foundry agents v2)
-azure-ai-projects
+# Pinned to 2.0.0b3 — 2.0.0b4 removed PromptAgentDefinitionText which agent-framework-azure-ai depends on
+azure-ai-projects==2.0.0b3
 
 # Environment variable loading
 python-dotenv

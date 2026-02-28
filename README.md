@@ -86,7 +86,10 @@ cp .env.sample .env
 # 3. Install all dependencies
 make install
 
-# 4. Start both backend + frontend
+# 3. Azure Login
+az login
+
+# 5. Start both backend + frontend
 make dev
 ```
 
@@ -106,8 +109,9 @@ Other useful commands:
 ### Option 2: VS Code Tasks
 
 1. Open the project in VS Code
-2. Press `Ctrl+Shift+P` → **Tasks: Run Task**
-3. Select **🚀 Start Certinator (Full App)**
+2. On the terminal, run `az login` to authenticate with Azure 
+3. Press `Ctrl+Shift+P` → **Tasks: Run Task**
+4. Select **🚀 Start Certinator (Full App)**
 
 **To stop:** Run task **⏹️ Stop All**
 
@@ -116,7 +120,8 @@ Other useful commands:
 1. Open in GitHub Codespaces or VS Code with the Dev Containers extension
 2. Wait for automatic setup (Python venv + pnpm install)
 3. Edit `.env` with your provider credentials
-4. Run `make dev` or use VS Code task **🚀 Start Certinator**
+4. For Azure AI Foundry, run `az login` in the dev container terminal to authenticate
+5. Run `make dev` or use VS Code task **🚀 Start Certinator**
 
 > [!TIP]
 > The dev container automatically forwards ports 3000 (frontend) and 8000 (backend).
@@ -184,6 +189,12 @@ LLM_MODEL_DEFAULT=gpt-4.1
 > 4. Copy the **Project connection string**
 
 See [`.env.sample`](.env.sample) for the full list of configuration options, including per-agent model overrides and rate limiting.
+
+Run AZ login:
+
+```bash
+az login  # Authenticate with Azure
+```
 
 ### Step 5: Run Services Separately
 

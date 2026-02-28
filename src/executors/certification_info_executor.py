@@ -27,6 +27,7 @@ import metrics
 from executors import (
     emit_response,
     extract_response_text,
+    get_user_friendly_error,
     safe_agent_run,
     update_workflow_progress,
 )
@@ -115,7 +116,10 @@ class CertificationInfoExecutor(Executor):
             await emit_response(
                 ctx,
                 self.id,
-                "I encountered an issue retrieving that information. Please try again.",
+                get_user_friendly_error(
+                    exc,
+                    "I encountered an issue retrieving that information. Please try again.",
+                ),
             )
             return
         await ctx.send_message(
@@ -199,7 +203,10 @@ class CertificationInfoExecutor(Executor):
             await emit_response(
                 ctx,
                 self.id,
-                "I encountered an issue refining that information. Please try again.",
+                get_user_friendly_error(
+                    exc,
+                    "I encountered an issue refining that information. Please try again.",
+                ),
             )
             return
         result_text = extract_response_text(

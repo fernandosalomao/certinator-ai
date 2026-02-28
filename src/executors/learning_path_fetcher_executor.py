@@ -31,6 +31,7 @@ import metrics
 from executors import (
     emit_response,
     extract_response_text,
+    get_user_friendly_error,
     safe_agent_run,
     update_workflow_progress,
 )
@@ -247,7 +248,10 @@ class LearningPathFetcherExecutor(Executor):
             await emit_response(
                 ctx,
                 self.id,
-                "I encountered an issue retrieving that information. Please try again.",
+                get_user_friendly_error(
+                    exc,
+                    "I encountered an issue retrieving that information. Please try again.",
+                ),
             )
             return None
 
@@ -307,7 +311,8 @@ class LearningPathFetcherExecutor(Executor):
         # Case 2: dict
         if isinstance(structured, dict):
             try:
-                normalised = LearningPathFetcherExecutor._normalize_llm_keys(structured)
+                normalised = LearningPathFetcherExecutor._normalize_llm_keys(
+                    structured)
                 return LearningPathFetcherResponse.model_validate(normalised)
             except Exception:
                 pass
@@ -333,7 +338,8 @@ class LearningPathFetcherExecutor(Executor):
             try:
                 data = json.loads(text)
                 if isinstance(data, dict):
-                    normalised = LearningPathFetcherExecutor._normalize_llm_keys(data)
+                    normalised = LearningPathFetcherExecutor._normalize_llm_keys(
+                        data)
                     return LearningPathFetcherResponse.model_validate(normalised)
             except (json.JSONDecodeError, Exception):
                 pass
@@ -389,8 +395,10 @@ class LearningPathFetcherExecutor(Executor):
         """
         parsed = LearningPathFetcherExecutor._parse_response_value(response)
         if parsed and parsed.learning_paths:
-            lps = [lp.model_dump(mode="python") for lp in parsed.learning_paths]
-            skills = [sk.model_dump(mode="python") for sk in parsed.skills_at_a_glance]
+            lps = [lp.model_dump(mode="python")
+                   for lp in parsed.learning_paths]
+            skills = [sk.model_dump(mode="python")
+                      for sk in parsed.skills_at_a_glance]
             return lps, skills
 
         logger.warning(
